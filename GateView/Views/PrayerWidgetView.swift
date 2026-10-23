@@ -4,6 +4,7 @@ struct PrayerWidgetView: View {
     let prayers: [Prayer]
     let error: String?
     let city: String
+    @Environment(\.gateMotion) private var motion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -16,9 +17,12 @@ struct PrayerWidgetView: View {
                         header(context.date)
                         if let phase = PrayerTimeService.phase(at: context.date, in: prayers) {
                             hero(phase, now: context.date)
+                                .id(caption(of: phase)) // new phase → cross-fade
+                                .transition(.opacity)
                             row(highlight: phase, now: context.date)
                         }
                     }
+                    .motion(.easeInOut(duration: 0.6), value: PrayerTimeService.phase(at: context.date, in: prayers).map(caption), enabled: motion)
                 }
             }
         }
@@ -48,14 +52,28 @@ struct PrayerWidgetView: View {
             }
             Spacer()
             if let target {
-                Text(PrayerTimeService.countdown(to: target, from: now))
+                let text = PrayerTimeService.countdown(to: target, from: now)
+                let finalMinute = target.timeIntervalSince(now) < 60
+                Text(text)
                     .font(.system(size: 40, weight: .light).monospacedDigit())
                     .foregroundStyle(phase == .iqamah(prayer) ? AnyShapeStyle(Color.green) : AnyShapeStyle(.tint))
+                    .rollingDigits(text, enabled: motion)
+                    // soft breathing pulse in the last minute
+                    .opacity(finalMinute && motion && Int(now.timeIntervalSince1970) % 2 == 0 ? 0.55 : 1)
+                    .motion(.easeInOut(duration: 0.9), value: Int(now.timeIntervalSince1970), enabled: finalMinute)
             } else {
                 Image(systemName: "person.3.sequence.fill")
                     .font(.system(size: 28))
                     .foregroundStyle(.tint)
             }
+        }
+    }
+
+    private func caption(of phase: PrayerPhase) -> String {
+        switch phase {
+        case .upcoming(let p): return "u" + p.name
+        case .iqamah(let p): return "i" + p.name
+        case .ongoing(let p): return "o" + p.name
         }
     }
 

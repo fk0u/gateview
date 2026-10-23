@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import ImageIO
 
 struct NowPlaying: Equatable {
@@ -79,8 +80,11 @@ final class NowPlayingService: ObservableObject {
                 let album = info?["kMRMediaRemoteNowPlayingInfoAlbum"] as? String ?? ""
                 let artwork = (info?["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data).flatMap(Self.thumbnail)
                 Task { @MainActor in
-                    self.track = title.isEmpty ? nil
+                    let next = title.isEmpty ? nil
                         : NowPlaying(title: title, artist: artist, album: album, artwork: artwork ?? self.track?.artwork, isPlaying: playing)
+                    // Animate here: the slide in/out of the widget follows this change.
+                    let animate = ThemeStore.shared.theme.motion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                    withAnimation(animate ? .spring(response: 0.5, dampingFraction: 0.85) : nil) { self.track = next }
                 }
             }
         }

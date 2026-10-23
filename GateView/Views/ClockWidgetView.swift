@@ -3,6 +3,7 @@ import SwiftUI
 struct ClockWidgetView<Accessory: View>: View {
     let theme: Theme
     @ViewBuilder var accessory: Accessory // e.g. weather, shown next to the greeting
+    @Environment(\.gateMotion) private var motion
 
 }
 
@@ -34,13 +35,17 @@ extension ClockWidgetView {
                     accessory
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(ClockFormat.hm.string(from: context.date))
+                    let hm = ClockFormat.hm.string(from: context.date)
+                    Text(hm)
                         .font(.system(size: theme.clockSize, weight: theme.clockFontWeight).monospacedDigit())
                         .tracking(-4)
+                        .rollingDigits(hm, enabled: motion)
                     if theme.showSeconds {
-                        Text(ClockFormat.ss.string(from: context.date))
+                        let ss = ClockFormat.ss.string(from: context.date)
+                        Text(ss)
                             .font(.system(size: theme.clockSize * 0.2, weight: .regular).monospacedDigit())
                             .foregroundStyle(.tint)
+                            .rollingDigits(ss, enabled: motion)
                     }
                 }
                 Text(ClockFormat.day.string(from: context.date))

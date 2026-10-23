@@ -5,9 +5,12 @@ struct DashboardView: View {
     @ObservedObject var viewModel: DashboardViewModel
     @ObservedObject var windows: WindowManager
     @ObservedObject var store: ThemeStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
 
     var body: some View {
         let theme = store.theme
+        let motion = theme.motion && !reduceMotion
         return ZStack(alignment: .bottom) {
             // Soft scrim so white text reads on any wallpaper.
             LinearGradient(colors: [.clear, .black.opacity(theme.scrim)], startPoint: .top, endPoint: .bottom)
@@ -25,6 +28,9 @@ struct DashboardView: View {
                     panel(theme)
                 }
             }
+            // Entrance: rise + fade once at launch.
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared || !motion ? 0 : 24)
             .padding(.horizontal, 72)
             .padding(.bottom, 56 + windows.dockInset)
         }
@@ -33,6 +39,10 @@ struct DashboardView: View {
         .tint(theme.accentColor)
         .fontDesign(theme.fontDesign)
         .environment(\.colorScheme, .dark)
+        .environment(\.gateMotion, motion)
+        .onAppear {
+            withAnimation(motion ? .spring(response: 0.9, dampingFraction: 0.85).delay(0.2) : nil) { appeared = true }
+        }
         .onPreferenceChange(HitRegionsKey.self) { windows.hitRegions = $0 }
         .task(id: windows.expanded) { await autoCollapse() }
     }
