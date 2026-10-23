@@ -178,8 +178,10 @@ private struct MotionSection: View {
 
 private struct WidgetsSection: View {
     @ObservedObject var store: ThemeStore
-    private static let names = ["prayer": ("Prayer times", "moon.stars.fill"), "agenda": ("Agenda", "calendar"),
-                                "nowPlaying": ("Now Playing", "music.note")]
+
+    private static func info(_ key: String) -> (key: String, name: String, symbol: String, experimental: Bool)? {
+        Theme.catalog.first { $0.key == key }
+    }
 
     var body: some View {
         SwiftUI.Section("Left side") {
@@ -188,28 +190,84 @@ private struct WidgetsSection: View {
         }
         SwiftUI.Section {
             List {
-                ForEach(store.theme.widgetOrder, id: \.self) { key in
-                    HStack {
-                        Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary)
-                        Label(Self.names[key]?.0 ?? key, systemImage: Self.names[key]?.1 ?? "square")
-                        Spacer()
-                        Toggle("", isOn: binding(for: key)).labelsHidden()
+                ForEach(store.theme.panelWidgets, id: \.self) { key in
+                    if let w = Self.info(key) {
+                        HStack {
+                            Image(systemName: "line.3.horizontal").foregroundStyle(.tertiary)
+                            Label(w.name, systemImage: w.symbol)
+                            if w.experimental { ExperimentalBadge() }
+                            Spacer()
+                            Button {
+                                store.theme.widgetOrder.removeAll { $0 == key }
+                            } label: {
+                                Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Remove from panel")
+                        }
                     }
                 }
-                .onMove { store.theme.widgetOrder.move(fromOffsets: $0, toOffset: $1) }
+                .onMove { from, to in
+                    var order = store.theme.panelWidgets
+                    order.move(fromOffsets: from, toOffset: to)
+                    store.theme.widgetOrder = order
+                }
             }
-            .frame(height: 120)
+            .frame(height: CGFloat(max(store.theme.panelWidgets.count, 1)) * 32 + 12)
+            let available = Theme.catalog.filter { !store.theme.panelWidgets.contains($0.key) }
+            if !available.isEmpty {
+                Menu {
+                    ForEach(available, id: \.key) { w in
+                        Button(w.experimental ? "\(w.name) (experimental)" : w.name) { store.theme.widgetOrder.append(w.key) }
+                    }
+                } label: {
+                    Label("Add widget", systemImage: "plus.circle")
+                }
+                .fixedSize()
+            }
         } header: {
             Text("Glass panel — drag to reorder")
+        } footer: {
+            Text("Prayer reminders keep working even when the Prayer widget is removed.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+
+        if store.theme.panelWidgets.contains("gallery") {
+            SwiftUI.Section {
+                LabeledContent("Folder") {
+                    Text(store.theme.galleryFolder).lineLimit(1).truncationMode(.middle).foregroundStyle(.secondary)
+                    Button("Choose…", action: chooseFolder)
+                }
+                LabeledContent("Change photo every") {
+                    Slider(value: $store.theme.galleryInterval, in: 10...300, step: 10)
+                    Text("\(Int(store.theme.galleryInterval)) s").monospacedDigit().frame(width: 44)
+                }
+            } header: {
+                HStack { Text("Gallery"); ExperimentalBadge() }
+            } footer: {
+                Text("Photos are downsampled to 900 px and only two are kept in memory (about +5–10 MB). Paused while the desktop is covered or in Low Power Mode.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 
-    private func binding(for key: String) -> Binding<Bool> {
-        switch key {
-        case "agenda": return $store.theme.showAgenda
-        case "nowPlaying": return $store.theme.showNowPlaying
-        default: return .constant(true) // prayer is the panel's anchor
-        }
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.directoryURL = URL(fileURLWithPath: (store.theme.galleryFolder as NSString).expandingTildeInPath)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        store.theme.galleryFolder = (url.path as NSString).abbreviatingWithTildeInPath
+    }
+}
+
+private struct ExperimentalBadge: View {
+    var body: some View {
+        Text("EXPERIMENTAL")
+            .font(.system(size: 9, weight: .bold))
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(.orange.opacity(0.2), in: Capsule())
+            .foregroundStyle(.orange)
     }
 }
 

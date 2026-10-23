@@ -20,6 +20,7 @@ final class DashboardViewModel: ObservableObject {
     let nowPlaying = NowPlayingService()
     let reminders = ReminderService()
     let stats = SystemStatsMonitor()
+    let gallery = GalleryService()
     private lazy var wallpaper = WallpaperColorService { [weak self] color in
         self?.wallpaperAccent = color.map(Color.init(nsColor:))
     }
@@ -61,6 +62,15 @@ final class DashboardViewModel: ObservableObject {
         store.$theme.map(\.mood).removeDuplicates().dropFirst()
             .sink { [weak self] _ in Task { @MainActor in self?.updateMood() } }
             .store(in: &subscriptions)
+        store.$theme.map { "\($0.panelWidgets.contains("gallery"))|\($0.galleryFolder)|\($0.galleryInterval)" }.removeDuplicates()
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    let t = self.store.theme
+                    t.panelWidgets.contains("gallery") ? self.gallery.start(folder: t.galleryFolder, interval: t.galleryInterval) : self.gallery.stop()
+                }
+            }
+            .store(in: &subscriptions)
         store.$theme.map(\.accentMode).removeDuplicates()
             .sink { [weak self] mode in mode == "wallpaper" ? self?.wallpaper.start() : self?.wallpaper.stop() }
             .store(in: &subscriptions)
@@ -75,7 +85,7 @@ final class DashboardViewModel: ObservableObject {
         store.$theme.map(\.showStats).removeDuplicates()
             .sink { [weak self] on in on ? self?.stats.start() : self?.stats.stop() }
             .store(in: &subscriptions)
-        store.$theme.map(\.showNowPlaying).removeDuplicates()
+        store.$theme.map { $0.panelWidgets.contains("nowPlaying") }.removeDuplicates()
             .sink { [weak self] on in on ? self?.nowPlaying.start() : self?.nowPlaying.stop() }
             .store(in: &subscriptions)
         Task { [weak self] in
@@ -112,6 +122,10 @@ final class DashboardViewModel: ObservableObject {
         guard week.isEmpty else { return }
         let t = store.theme
         week = await prayerService.week(city: t.city, country: t.country, method: t.prayerMethod)
+    }
+
+    func events(on day: Date) -> [Agenda] {
+        calendarAuthorized ? calendarService.events(on: day) : []
     }
 
     func detailEvents() -> [Agenda] {

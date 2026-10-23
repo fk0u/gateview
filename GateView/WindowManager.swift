@@ -14,21 +14,24 @@ final class WindowManager: ObservableObject {
     @Published private(set) var isVisible = true
     @Published private(set) var hovered: String?
     @Published var expanded: String? {
-        didSet { updateMouse() }
+        didSet {
+            updateMouse()
+            updateKeyFocus()
+        }
     }
 
     var hitRegions: [String: CGRect] = [:] {
         didSet { updateMouse() }
     }
 
-    private var window: NSWindow?
+    private var window: DesktopWindow?
     private var observers: [NSObjectProtocol] = []
     private var monitors: [Any] = []
     private var subscriptions: Set<AnyCancellable> = []
     private let store = ThemeStore.shared
 
     func show(viewModel: DashboardViewModel) {
-        let window = NSWindow(
+        let window = DesktopWindow(
             contentRect: .zero,
             styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
@@ -79,6 +82,20 @@ final class WindowManager: ObservableObject {
         ].compactMap { $0 }
     }
 
+    /// Typing in Notes needs keyboard focus, which a desktop-level window normally never gets.
+    private func updateKeyFocus() {
+        guard let window else { return }
+        let typing = expanded == "notes"
+        window.allowsKey = typing
+        if typing {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKey()
+        } else if window.isKeyWindow {
+            window.resignKey()
+            NSApp.deactivate() // hand focus back to whatever app was in front
+        }
+    }
+
     /// Only the widget under the cursor captures the mouse; the rest of the desktop stays clickable.
     private func updateMouse() {
         guard let window else { return }
@@ -100,4 +117,10 @@ final class WindowManager: ObservableObject {
         window?.setFrame(screen.frame, display: true)
         dockInset = screen.visibleFrame.minY - screen.frame.minY
     }
+}
+
+/// Borderless windows refuse key status; this one accepts it only while Notes is being edited.
+final class DesktopWindow: NSWindow {
+    var allowsKey = false
+    override var canBecomeKey: Bool { allowsKey }
 }

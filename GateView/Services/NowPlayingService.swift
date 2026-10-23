@@ -8,6 +8,16 @@ struct NowPlaying: Equatable {
     let album: String
     let artwork: NSImage?
     let isPlaying: Bool
+    var duration: Double = 0     // seconds, 0 when unknown (live streams)
+    var elapsed: Double = 0      // at `timestamp`
+    var timestamp = Date()
+    var rate: Double = 0
+
+    /// Current position: MediaRemote reports elapsed at a timestamp; it advances at `rate` while playing.
+    func position(at now: Date) -> Double {
+        let p = elapsed + (isPlaying ? now.timeIntervalSince(timestamp) * max(rate, 1) : 0)
+        return duration > 0 ? min(max(p, 0), duration) : max(p, 0)
+    }
 }
 
 /// Reads and controls the system "Now Playing" via the private MediaRemote framework (event-driven, no polling).
@@ -23,11 +33,13 @@ final class NowPlayingService: ObservableObject {
     private typealias GetPID = @convention(c) (DispatchQueue, @escaping @convention(block) (Int32) -> Void) -> Void
     private typealias Register = @convention(c) (DispatchQueue) -> Void
     private typealias Send = @convention(c) (UInt32, NSDictionary?) -> Bool
+    private typealias SetElapsed = @convention(c) (Double) -> Void
 
     private var getInfo: GetInfo?
     private var isPlaying: IsPlaying?
     private var getPID: GetPID?
     private var send: Send?
+    private var setElapsed: SetElapsed?
     private var observers: [NSObjectProtocol] = []
 
     func start() {
@@ -41,6 +53,7 @@ final class NowPlayingService: ObservableObject {
         isPlaying = unsafeBitCast(playingSym, to: IsPlaying.self)
         getPID = dlsym(handle, "MRMediaRemoteGetNowPlayingApplicationPID").map { unsafeBitCast($0, to: GetPID.self) }
         send = dlsym(handle, "MRMediaRemoteSendCommand").map { unsafeBitCast($0, to: Send.self) }
+        setElapsed = dlsym(handle, "MRMediaRemoteSetElapsedTime").map { unsafeBitCast($0, to: SetElapsed.self) }
         unsafeBitCast(registerSym, to: Register.self)(.main)
 
         observers = ["kMRMediaRemoteNowPlayingInfoDidChangeNotification",
@@ -64,6 +77,12 @@ final class NowPlayingService: ObservableObject {
         _ = send?(command.rawValue, nil)
     }
 
+    func seek(to seconds: Double) {
+        setElapsed?(seconds)
+        if let t = track { track = NowPlaying(title: t.title, artist: t.artist, album: t.album, artwork: t.artwork, isPlaying: t.isPlaying,
+                                              duration: t.duration, elapsed: seconds, timestamp: Date(), rate: t.rate) }
+    }
+
     /// Brings the player (Spotify, Music, browser…) to the front.
     func openSource() {
         getPID?(.main) { pid in
@@ -78,13 +97,22 @@ final class NowPlayingService: ObservableObject {
                 let title = info?["kMRMediaRemoteNowPlayingInfoTitle"] as? String ?? ""
                 let artist = info?["kMRMediaRemoteNowPlayingInfoArtist"] as? String ?? ""
                 let album = info?["kMRMediaRemoteNowPlayingInfoAlbum"] as? String ?? ""
-                let artwork = (info?["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data).flatMap(Self.thumbnail)
+                // Browsers post info changes often; only decode artwork when the song changes.
+                let same = self.track.map { $0.title == title && $0.artist == artist && $0.artwork != nil } ?? false
+                let artwork = same ? nil : (info?["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data).flatMap(Self.thumbnail)
+                let duration = info?["kMRMediaRemoteNowPlayingInfoDuration"] as? Double ?? 0
+                let elapsed = info?["kMRMediaRemoteNowPlayingInfoElapsedTime"] as? Double ?? 0
+                let timestamp = info?["kMRMediaRemoteNowPlayingInfoTimestamp"] as? Date ?? Date()
+                let rate = info?["kMRMediaRemoteNowPlayingInfoPlaybackRate"] as? Double ?? (playing ? 1 : 0)
                 Task { @MainActor in
                     let next = title.isEmpty ? nil
-                        : NowPlaying(title: title, artist: artist, album: album, artwork: artwork ?? self.track?.artwork, isPlaying: playing)
+                        : NowPlaying(title: title, artist: artist, album: album, artwork: artwork ?? self.track?.artwork, isPlaying: playing,
+                                     duration: duration, elapsed: elapsed, timestamp: timestamp, rate: rate)
                     // Animate here: the slide in/out of the widget follows this change.
                     let animate = ThemeStore.shared.theme.motion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-                    withAnimation(animate ? .spring(response: 0.5, dampingFraction: 0.85) : nil) { self.track = next }
+                    // Animate only appear/disappear/song change; timing-only updates stay instant.
+                    let structural = next?.title != self.track?.title || next?.isPlaying != self.track?.isPlaying
+                    withAnimation(animate && structural ? .spring(response: 0.5, dampingFraction: 0.85) : nil) { self.track = next }
                 }
             }
         }

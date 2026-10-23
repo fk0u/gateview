@@ -18,10 +18,8 @@ struct Theme: Codable, Equatable {
 
     // Widgets
     var showWeather = true
-    var showNowPlaying = true
     var showStats = true
-    var showAgenda = true
-    var widgetOrder = ["prayer", "agenda", "nowPlaying"] // right-panel order
+    var widgetOrder = ["prayer", "agenda", "nowPlaying"] // glass panel: what's listed is shown, in this order
     var interactive = true        // hover + click widgets for details
     var displayIndex = 0          // 0 = main screen
 
@@ -36,6 +34,10 @@ struct Theme: Codable, Equatable {
     var reminderSound = "Glass"
     var reminders = ["Fajr": true, "Dhuhr": true, "Asr": true, "Maghrib": true, "Isha": true]
     var temperatureUnit = "celsius" // celsius | fahrenheit
+
+    // Gallery (experimental)
+    var galleryFolder = "~/Pictures"
+    var galleryInterval = 30.0    // seconds per photo
 
     // Location (prayer times + weather)
     var city = "Samarinda"
@@ -52,6 +54,10 @@ struct Theme: Codable, Equatable {
         var merged = try JSONSerialization.jsonObject(with: JSONEncoder().encode(Theme())) as! [String: Any]
         let user = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
         merged.merge(user) { _, new in new }
+        // 2.1 → 2.2: the old show* flags become "not in widgetOrder".
+        for (flag, key) in [("showAgenda", "agenda"), ("showNowPlaying", "nowPlaying")] where user[flag] as? Bool == false {
+            merged["widgetOrder"] = (merged["widgetOrder"] as? [String] ?? []).filter { $0 != key }
+        }
         return try JSONDecoder().decode(Theme.self, from: JSONSerialization.data(withJSONObject: merged))
     }
 
@@ -63,6 +69,22 @@ struct Theme: Codable, Equatable {
         ("Sahara", { $0.accent = "#F2A65A"; $0.font = "serif"; $0.clockWeight = "light"; $0.glassTint = 0.2; $0.scrim = 0.4; $0.accentMode = "custom" }),
         ("Wallpaper", { $0.accentMode = "wallpaper"; $0.font = "default"; $0.clockWeight = "ultraLight"; $0.glassTint = 0.15; $0.scrim = 0.35 }),
     ]
+
+    /// Every widget the glass panel can hold.
+    static let catalog: [(key: String, name: String, symbol: String, experimental: Bool)] = [
+        ("prayer", "Prayer times", "moon.stars.fill", false),
+        ("agenda", "Agenda", "list.bullet.rectangle", false),
+        ("nowPlaying", "Now Playing", "music.note", false),
+        ("calendar", "Calendar", "calendar", false),
+        ("notes", "Notes", "note.text", false),
+        ("gallery", "Gallery", "photo.on.rectangle", true),
+    ]
+
+    /// Known widgets only, no duplicates, in the user's order.
+    var panelWidgets: [String] {
+        var seen = Set<String>()
+        return widgetOrder.filter { key in Self.catalog.contains { $0.key == key } && seen.insert(key).inserted }
+    }
 
     var locationKey: String { "\(city)|\(country)|\(latitude)|\(longitude)|\(prayerMethod)|\(iqamah.sorted { $0.key < $1.key })" }
 

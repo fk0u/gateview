@@ -1,4 +1,4 @@
-// Run: swiftc GateView/Models/*.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore,MoodEngine,WallpaperColorService}.swift Tests/main.swift -o /tmp/gv-check && /tmp/gv-check
+// Run: swiftc GateView/Models/*.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore,MoodEngine,WallpaperColorService,NowPlayingService,GalleryService}.swift Tests/main.swift -o /tmp/gv-check && /tmp/gv-check
 import Foundation
 import SwiftUI
 
@@ -72,4 +72,28 @@ let sample = Data(##"{"utc_offset_seconds":28800,"current":{"temperature_2m":29.
 let w = try! WeatherService.parse(sample, now: at(14, 0, friday))
 assert(w.temperature == 30 && w.feelsLike == 33 && w.label == "Hujan" && w.code == 63)
 assert(w.hourly.count == 2 && w.hourly[1].rainChance == 0 && w.daily.count == 1 && w.daily[0].max == 32)
+// Now Playing position: advances while playing, frozen when paused, clamped to duration
+let t0 = Date(timeIntervalSince1970: 1_000)
+let song = NowPlaying(title: "x", artist: "", album: "", artwork: nil, isPlaying: true, duration: 200, elapsed: 50, timestamp: t0, rate: 1)
+assert(song.position(at: t0.addingTimeInterval(10)) == 60)
+assert(song.position(at: t0.addingTimeInterval(1_000)) == 200)
+let pausedSong = NowPlaying(title: "x", artist: "", album: "", artwork: nil, isPlaying: false, duration: 200, elapsed: 50, timestamp: t0, rate: 0)
+assert(pausedSong.position(at: t0.addingTimeInterval(10)) == 50)
+
+// Widget catalog: unknown keys and duplicates dropped, prayer removable
+var panelTheme = Theme()
+panelTheme.widgetOrder = ["notes", "bogus", "prayer", "notes", "gallery"]
+assert(panelTheme.panelWidgets == ["notes", "prayer", "gallery"])
+panelTheme.widgetOrder.removeAll { $0 == "prayer" }
+assert(!panelTheme.panelWidgets.contains("prayer"))
+// 2.1 theme with showAgenda=false migrates to "agenda not in panel"
+let migrated = try! Theme.decode(Data(##"{"showAgenda": false, "showNowPlaying": true}"##.utf8))
+assert(migrated.panelWidgets == ["prayer", "nowPlaying"])
+
+// Gallery picks up images only
+let dir = FileManager.default.temporaryDirectory.appendingPathComponent("gv-gallery-\(UUID().uuidString)")
+try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+for name in ["a.jpg", "b.PNG", "c.txt", ".hidden.jpg"] { FileManager.default.createFile(atPath: dir.appendingPathComponent(name).path, contents: Data()) }
+assert(Set(GalleryService.images(in: dir).map(\.lastPathComponent)) == ["a.jpg", "b.PNG"])
+try? FileManager.default.removeItem(at: dir)
 print("ok", PrayerTimeService.hijri(friday))

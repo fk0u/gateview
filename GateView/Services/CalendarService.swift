@@ -41,6 +41,16 @@ final class CalendarService {
             }
     }
 
+    /// All events on one day (for the Calendar widget's selected date).
+    func events(on day: Date) -> [Agenda] {
+        let start = Calendar.current.startOfDay(for: day)
+        guard let end = Calendar.current.date(byAdding: .day, value: 1, to: start) else { return [] }
+        return store.events(matching: store.predicateForEvents(withStart: start, end: end, calendars: nil))
+            .sorted { $0.startDate < $1.startDate }
+            .map { Agenda(id: $0.calendarItemIdentifier, title: $0.title ?? "Untitled", start: $0.startDate, end: $0.endDate,
+                          isAllDay: $0.isAllDay, location: $0.location, color: $0.calendar.cgColor) }
+    }
+
     /// ponytail: just opens Calendar; jumping to the exact event needs AppleScript + Automation permission.
     static func openCalendar() {
         NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Applications/Calendar.app"), configuration: .init())

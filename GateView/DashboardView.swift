@@ -67,6 +67,7 @@ struct DashboardView: View {
         }
         .onPreferenceChange(HitRegionsKey.self) { windows.hitRegions = $0 }
         .task(id: windows.expanded) { await autoCollapse() }
+        .onChange(of: windows.isVisible) { viewModel.gallery.paused = !$0 }
     }
 
     // MARK: Columns
@@ -112,21 +113,16 @@ struct DashboardView: View {
         .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .opacity))
     }
 
-    private func panel(_ theme: Theme) -> some View {
+    @ViewBuilder private func panel(_ theme: Theme) -> some View {
+        if !theme.panelWidgets.isEmpty { // empty panel → no glass card at all
         VStack(alignment: .leading, spacing: 20) {
-            let visible = theme.widgetOrder.filter { key in
-                switch key {
-                case "agenda": return theme.showAgenda
-                case "nowPlaying": return theme.showNowPlaying
-                default: return true
-                }
-            }
-            ForEach(Array(visible.enumerated()), id: \.element) { index, key in
+            ForEach(Array(theme.panelWidgets.enumerated()), id: \.element) { index, key in
                 panelWidget(key, theme: theme, divider: index > 0)
             }
         }
         .frame(width: 380)
         .glass(tint: theme.glassTint)
+        }
     }
 
     @ViewBuilder private func panelWidget(_ key: String, theme: Theme, divider: Bool) -> some View {
@@ -150,6 +146,17 @@ struct DashboardView: View {
                     CalendarWidgetView(events: viewModel.events, authorized: viewModel.calendarAuthorized)
                 }
             }
+        case "calendar":
+            if divider { Divider().overlay(.white.opacity(0.15)) }
+            card("calendar") { expanded in
+                CalendarWidget(expanded: expanded, eventsOn: viewModel.events(on:))
+            }
+        case "notes":
+            if divider { Divider().overlay(.white.opacity(0.15)) }
+            card("notes") { expanded in NotesWidget(expanded: expanded, store: .shared) }
+        case "gallery":
+            if divider { Divider().overlay(.white.opacity(0.15)) }
+            card("gallery") { expanded in GalleryWidget(expanded: expanded, gallery: viewModel.gallery) }
         case "nowPlaying":
             NowPlayingSlot(service: viewModel.nowPlaying, windows: windows, divider: divider, motion: theme.motion)
         default:
@@ -163,7 +170,8 @@ struct DashboardView: View {
 
     /// Close an open detail after 20 s without the cursor on it.
     private func autoCollapse() async {
-        guard let id = windows.expanded else { return }
+        // Notes stays open while you type; it closes on a click outside.
+        guard let id = windows.expanded, id != "notes" else { return }
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 20_000_000_000)
             guard !Task.isCancelled, windows.expanded == id else { return }

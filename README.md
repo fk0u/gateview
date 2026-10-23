@@ -14,9 +14,11 @@ An ultra-light ambient dashboard that lives **on your macOS wallpaper**: below e
 - **Weather** ([Open-Meteo](https://open-meteo.com), no API key)
 - **Now Playing**: Spotify, Music, YouTube in the browser, with artwork
 - **Agenda**: next 3 events today from Apple Calendar
+- **Modular panel**: pick and order any of Prayer, Agenda, Now Playing, **Calendar**, **Notes** and **Gallery** *(experimental)*, or drop Prayer entirely
+- **Notes**: type right on the desktop; saved to `~/.config/gateview/notes.md`
 - **System stats**: CPU, RAM, battery
 - **Real glass**: behind-window blur of your wallpaper, not a flat card
-- **Interactive**: hover a widget, click it to open details (full prayer schedule and 7 days, hourly and 5-day weather, agenda for tomorrow, music controls, CPU/RAM sparkline, month calendar with Hijri dates). Everywhere else stays click-through.
+- **Interactive**: hover a widget, click it to open details (full prayer schedule and 7 days, hourly and 5-day weather, agenda for tomorrow, music controls with a seekable progress bar, CPU/RAM sparkline, month calendar with Hijri dates). Everywhere else stays click-through.
 - **Alive**: rolling digits, a mood tint that follows the day (cool Subuh, golden before Maghrib, calm night), an accent that can follow your wallpaper, and live rain, storm and fog drawn by Core Animation on the GPU
 - **Settings app**: sidebar, presets, city search, per-prayer reminders and sounds, live preview, plus a live-reloading `~/.config/gateview/theme.json`
 
@@ -44,7 +46,7 @@ Requires Xcode 15+ command line tools.
 Self-check for the prayer, weather, stats and theme logic:
 
 ```bash
-swiftc GateView/Models/*.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore,MoodEngine,WallpaperColorService}.swift Tests/main.swift -o /tmp/gv-check && /tmp/gv-check
+swiftc GateView/Models/*.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore,MoodEngine,WallpaperColorService,NowPlayingService,GalleryService}.swift Tests/main.swift -o /tmp/gv-check && /tmp/gv-check
 ```
 
 ## Customize
@@ -71,14 +73,15 @@ Use the menu bar icon → **Settings…**, or edit `~/.config/gateview/theme.jso
 | `font` | `default` · `rounded` · `serif` · `monospaced` |
 | `clockWeight` | `ultraLight` · `thin` · `light` · `regular` · `medium` · `bold` |
 | `clockSize`, `showSeconds`, `panelSide` (`right`/`left`) | layout |
-| `glassTint`, `scrim` | 0–1 darkness of the glass and of the bottom gradient |
-| `showWeather`, `showAgenda`, `showNowPlaying`, `showStats` | widgets on/off |
+| `glassTint`, `scrim`, `menuBarScrim` | 0–1 darkness of the glass, the bottom gradient and the menu bar fade |
+| `showWeather`, `showStats` | left-side widgets on/off |
 | `city`, `country`, `prayerMethod`, `latitude`, `longitude` | location ([method ids](https://aladhan.com/calculation-methods)) |
 | `iqamah` | minutes after adzan, per `Fajr`/`Dhuhr`/`Asr`/`Maghrib`/`Isha` |
 | `accentMode` | `custom` · `wallpaper` |
 | `motion`, `mood`, `interactive` | animations, time/prayer tint, clickable widgets |
 | `weatherEffects` | `off` · `subtle` · `full` |
-| `widgetOrder` | e.g. `["prayer", "nowPlaying", "agenda"]` |
+| `widgetOrder` | panel widgets in order, any of `prayer`, `agenda`, `nowPlaying`, `calendar`, `notes`, `gallery` |
+| `galleryFolder`, `galleryInterval` | photo folder (default `~/Pictures`), seconds per photo |
 | `reminderMode`, `reminderSound`, `reminders` | `off`/`banner`/`chime`, a system sound name, per-prayer on/off |
 | `temperatureUnit`, `displayIndex` | `celsius`/`fahrenheit`, which screen (0 = main) |
 
