@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 560" width="1280" height="560">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2B3550"/><stop offset=".55" stop-color="#1A2033"/><stop offset="1" stop-color="#0B0E18"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".78" cy=".2" r=".6">
+      <stop offset="0" stop-color="#F08A3C" stop-opacity=".45"/><stop offset="1" stop-color="#F08A3C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFC56B"/><stop offset="1" stop-color="#F08A3C"/>
+    </linearGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset=".5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="560" rx="28" fill="url(#sky)"/>
+  <rect width="1280" height="560" rx="28" fill="url(#glow)"/>
+  <rect width="1280" height="560" rx="28" fill="url(#fade)"/>
+
+  <!-- logo + wordmark -->
+  <g transform="translate(84 92) scale(.36)" fill="none" stroke-width="24" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M181.7 74.3A76 76 0 1 0 204 128" stroke="#F4F6FB"/>
+    <path d="M128 84V128H204" stroke="url(#gold)"/>
+  </g>
+  <text x="190" y="152" font-family="Helvetica Neue, Helvetica, Arial" font-size="56" font-weight="600" fill="#F4F6FB">GateView</text>
+  <text x="96" y="214" font-family="Helvetica Neue, Helvetica, Arial" font-size="24" fill="#F4F6FB" fill-opacity=".72">Ambient desktop dashboard for macOS — lives on your wallpaper.</text>
+
+  <!-- mini dashboard -->
+  <text x="96" y="318" font-family="Helvetica Neue, Helvetica, Arial" font-size="22" fill="#F4F6FB" fill-opacity=".8">Good Evening  ·  ☁ 29° Berawan</text>
+  <text x="90" y="438" font-family="Helvetica Neue, Helvetica, Arial" font-size="128" font-weight="200" fill="#F4F6FB" letter-spacing="-3">19:10</text>
+  <text x="424" y="438" font-family="Helvetica Neue, Helvetica, Arial" font-size="30" fill="#FFC56B">42</text>
+  <text x="96" y="484" font-family="Helvetica Neue, Helvetica, Arial" font-size="15" fill="#F4F6FB" fill-opacity=".6">CPU 4%   ·   RAM 52%   ·   Battery 82%</text>
+
+  <g transform="translate(800 280)">
+    <rect width="384" height="208" rx="22" fill="#FFFFFF" fill-opacity=".07" stroke="#FFFFFF" stroke-opacity=".18"/>
+    <text x="24" y="40" font-family="Helvetica Neue, Helvetica, Arial" font-size="13" font-weight="600" fill="#F4F6FB" fill-opacity=".65">Iqomah dalam</text>
+    <text x="24" y="78" font-family="Helvetica Neue, Helvetica, Arial" font-size="30" font-weight="600" fill="#F4F6FB">Isya</text>
+    <text x="360" y="80" text-anchor="end" font-family="Helvetica Neue, Helvetica, Arial" font-size="38" font-weight="300" fill="#7EE2A8">07:18</text>
+    <g font-family="Helvetica Neue, Helvetica, Arial" font-size="12" fill="#F4F6FB" text-anchor="middle">
+      <text x="56" y="128" fill-opacity=".55">Subuh</text><text x="56" y="148" fill-opacity=".55">04.34</text>
+      <text x="124" y="128" fill-opacity=".55">Dzuhur</text><text x="124" y="148" fill-opacity=".55">11.56</text>
+      <text x="192" y="128" fill-opacity=".55">Ashar</text><text x="192" y="148" fill-opacity=".55">15.14</text>
+      <text x="260" y="128" fill-opacity=".55">Maghrib</text><text x="260" y="148" fill-opacity=".55">18.00</text>
+      <rect x="300" y="110" width="56" height="50" rx="9" fill="#FFFFFF" fill-opacity=".1"/>
+      <text x="328" y="128" fill="#FFC56B">Isya</text><text x="328" y="148" fill="#FFC56B">19.10</text>
+    </g>
+    <text x="24" y="188" font-family="Helvetica Neue, Helvetica, Arial" font-size="13" fill="#F4F6FB" fill-opacity=".6">♪  Now Playing  ·  Agenda  ·  Reminder</text>
+  </g>
+</svg>
