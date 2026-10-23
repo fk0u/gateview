@@ -11,10 +11,15 @@ struct DashboardView: View {
     var body: some View {
         let theme = store.theme
         let motion = theme.motion && !reduceMotion
+        let mood = viewModel.mood
+        let moodColor = Color(hex: mood.tint) ?? .black
+        let accent = theme.accentMode == "wallpaper" ? viewModel.wallpaperAccent ?? theme.accentColor : theme.accentColor
         return ZStack(alignment: .bottom) {
             // Soft scrim so white text reads on any wallpaper.
-            LinearGradient(colors: [.clear, .black.opacity(theme.scrim)], startPoint: .top, endPoint: .bottom)
-                .frame(height: 420 + windows.dockInset)
+            // Mood washes a soft colour into the middle of the scrim.
+            LinearGradient(colors: [.clear, moodColor.opacity(mood.tintOpacity), .black.opacity(min(theme.scrim + mood.scrimDelta, 0.95))],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 420 + windows.dockInset + mood.scrimDelta * 400)
                 .frame(maxWidth: .infinity)
 
             HStack(alignment: .bottom, spacing: 40) {
@@ -36,7 +41,10 @@ struct DashboardView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .foregroundStyle(.white)
-        .tint(theme.accentColor)
+        .tint(accent)
+        .environment(\.moodTint, moodColor.opacity(mood.tintOpacity * 0.6))
+        .motion(.easeInOut(duration: 3), value: mood, enabled: motion)
+        .motion(.easeInOut(duration: 1.2), value: accent, enabled: motion)
         .fontDesign(theme.fontDesign)
         .environment(\.colorScheme, .dark)
         .environment(\.gateMotion, motion)
@@ -179,8 +187,27 @@ private struct NowPlayingSlot: View {
 extension View {
     /// Real behind-window blur of the wallpaper (SwiftUI Material only blurs within the window).
     func glass(tint: Double) -> some View {
-        padding(24)
-            .background(Color.black.opacity(tint).background(VisualEffectBlur()))
+        modifier(Glass(tint: tint))
+    }
+}
+
+private struct MoodTintKey: EnvironmentKey { static let defaultValue = Color.clear }
+
+extension EnvironmentValues {
+    var moodTint: Color {
+        get { self[MoodTintKey.self] }
+        set { self[MoodTintKey.self] = newValue }
+    }
+}
+
+private struct Glass: ViewModifier {
+    let tint: Double
+    @Environment(\.moodTint) private var moodTint
+
+    func body(content: Content) -> some View {
+        content
+            .padding(24)
+            .background(moodTint.background(Color.black.opacity(tint)).background(VisualEffectBlur()))
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)

@@ -1,4 +1,5 @@
 import Combine
+import SwiftUI
 import EventKit
 import Foundation
 
@@ -11,10 +12,15 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var weather: Weather?
     @Published private(set) var todayTimings: [String: String] = [:] // incl. Imsak, Sunrise for the detail card
     @Published private(set) var week: [PrayerDay] = []
+    @Published private(set) var mood = Mood()
+    @Published private(set) var wallpaperAccent: Color?
 
     let nowPlaying = NowPlayingService()
     let reminders = ReminderService()
     let stats = SystemStatsMonitor()
+    private lazy var wallpaper = WallpaperColorService { [weak self] color in
+        self?.wallpaperAccent = color.map(Color.init(nsColor:))
+    }
     private let prayerService = PrayerTimeService()
     private let calendarService = CalendarService()
     private let weatherService = WeatherService()
@@ -48,6 +54,20 @@ final class DashboardViewModel: ObservableObject {
         store.$theme.map(\.temperatureUnit).removeDuplicates().dropFirst()
             .sink { [weak self] _ in Task { await self?.loadWeather() } }
             .store(in: &subscriptions)
+        store.$theme.map(\.mood).removeDuplicates().dropFirst()
+            .sink { [weak self] _ in Task { @MainActor in self?.updateMood() } }
+            .store(in: &subscriptions)
+        store.$theme.map(\.accentMode).removeDuplicates()
+            .sink { [weak self] mode in mode == "wallpaper" ? self?.wallpaper.start() : self?.wallpaper.stop() }
+            .store(in: &subscriptions)
+        // Mood: recomputed at each minute boundary (and when the schedule loads).
+        Task { [weak self] in
+            while !Task.isCancelled {
+                self?.updateMood()
+                let wait = 60 - Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 60)
+                try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            }
+        }
         store.$theme.map(\.showStats).removeDuplicates()
             .sink { [weak self] on in on ? self?.stats.start() : self?.stats.stop() }
             .store(in: &subscriptions)
@@ -71,6 +91,11 @@ final class DashboardViewModel: ObservableObject {
         if force { await loadWeather() }
     }
 
+    private func updateMood() {
+        let next = store.theme.mood ? MoodEngine.mood(at: .now, prayers: prayers) : Mood()
+        if next != mood { mood = next }
+    }
+
     func loadWeek() async {
         guard week.isEmpty else { return }
         let t = store.theme
@@ -91,6 +116,7 @@ final class DashboardViewModel: ObservableObject {
             let day = try await prayerService.todayTimings(city: t.city, country: t.country, method: t.prayerMethod, force: force)
             prayers = PrayerTimeService.prayers(from: day, iqamah: t.iqamah)
             todayTimings = day.timings
+            updateMood()
             week = []
             prayerError = nil
             await rescheduleReminders()
