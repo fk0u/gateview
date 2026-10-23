@@ -6,6 +6,7 @@ struct SettingsView: View {
     @ObservedObject var store: ThemeStore
     @ObservedObject var windows: WindowManager
     let testReminder: () -> Void
+    let previewWeather: (Int) -> Void
     @State private var section: Section? = .appearance
 
     enum Section: String, CaseIterable, Identifiable {
@@ -44,7 +45,7 @@ struct SettingsView: View {
         switch section ?? .appearance {
         case .general: GeneralSection(store: store, windows: windows)
         case .appearance: AppearanceSection(store: store)
-        case .motion: MotionSection(store: store)
+        case .motion: MotionSection(store: store, preview: previewWeather)
         case .widgets: WidgetsSection(store: store)
         case .prayer: PrayerSection(store: store, testReminder: testReminder)
         case .weather: WeatherSection(store: store)
@@ -141,6 +142,7 @@ private struct AppearanceSection: View {
 
 private struct MotionSection: View {
     @ObservedObject var store: ThemeStore
+    let preview: (Int) -> Void
 
     var body: some View {
         SwiftUI.Section {
@@ -162,6 +164,13 @@ private struct MotionSection: View {
             .pickerStyle(.segmented)
             Text("Rain, drizzle, storm and fog behind the widgets. Paused when the desktop is covered or in Low Power Mode.")
                 .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Text("Preview 15 s").foregroundStyle(.secondary)
+                ForEach([("Gerimis", 53), ("Hujan", 63), ("Badai", 95), ("Kabut", 45)], id: \.1) { name, code in
+                    Button(name) { preview(code) }
+                }
+            }
+            .disabled(store.theme.weatherEffects == "off")
         }
     }
 }

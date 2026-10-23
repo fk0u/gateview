@@ -14,6 +14,8 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var week: [PrayerDay] = []
     @Published private(set) var mood = Mood()
     @Published private(set) var wallpaperAccent: Color?
+    /// Settings → "Preview" shows an effect for 15 s regardless of the real weather.
+    @Published private(set) var effectPreview: Int?
 
     let nowPlaying = NowPlayingService()
     let reminders = ReminderService()
@@ -42,6 +44,8 @@ final class DashboardViewModel: ObservableObject {
             },
         ]
         Task { await refresh() }
+        // Debug: `GateView -GateViewPreviewEffect 63` forces a weather effect (used to measure CPU).
+        let code = UserDefaults.standard.integer(forKey: "GateViewPreviewEffect"); if code > 0 { effectPreview = code }
 
         // Location / iqamah edits (Settings or theme.json) → refetch. dropFirst: init already loads.
         store.$theme.map(\.locationKey).removeDuplicates().dropFirst()
@@ -89,6 +93,14 @@ final class DashboardViewModel: ObservableObject {
         }
         loadEvents()
         if force { await loadWeather() }
+    }
+
+    func previewEffect(_ code: Int) {
+        effectPreview = code
+        Task {
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            if effectPreview == code { effectPreview = nil }
+        }
     }
 
     private func updateMood() {

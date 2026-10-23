@@ -16,6 +16,10 @@ struct DashboardView: View {
         let accent = theme.accentMode == "wallpaper" ? viewModel.wallpaperAccent ?? theme.accentColor : theme.accentColor
         return ZStack(alignment: .bottom) {
             // Soft scrim so white text reads on any wallpaper.
+            if theme.weatherEffects != "off", let code = viewModel.effectPreview ?? viewModel.weather?.code {
+                WeatherEffectsView(code: code, intensity: theme.weatherEffects, active: windows.isVisible)
+            }
+
             // Mood washes a soft colour into the middle of the scrim.
             LinearGradient(colors: [.clear, moodColor.opacity(mood.tintOpacity), .black.opacity(min(theme.scrim + mood.scrimDelta, 0.95))],
                            startPoint: .top, endPoint: .bottom)

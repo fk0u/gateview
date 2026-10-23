@@ -36,9 +36,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func openSettings() {
         if settingsWindow == nil {
-            let root = SettingsView(store: .shared, windows: windows) { [weak self] in
-                self?.viewModel.reminders.test(theme: ThemeStore.shared.theme)
-            }
+            let root = SettingsView(
+                store: .shared, windows: windows,
+                testReminder: { [weak self] in self?.viewModel.reminders.test(theme: ThemeStore.shared.theme) },
+                previewWeather: { [weak self] code in self?.viewModel.previewEffect(code) }
+            )
             let window = NSWindow(contentViewController: NSHostingController(rootView: root))
             window.title = "GateView Settings"
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]

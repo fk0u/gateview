@@ -2,14 +2,6 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// Hit-test frames of interactive widgets, in the hosting view's top-left coordinate space.
-struct HitRegionsKey: PreferenceKey {
-    static var defaultValue: [String: CGRect] = [:]
-    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
-        value.merge(nextValue()) { $1 }
-    }
-}
-
 @MainActor
 final class WindowManager: ObservableObject {
     /// Forces the old behaviour: every click goes to the desktop.
@@ -98,12 +90,7 @@ final class WindowManager: ObservableObject {
     private func region(at screenPoint: NSPoint) -> String? {
         guard let frame = window?.frame else { return nil }
         let p = CGPoint(x: screenPoint.x - frame.minX, y: frame.maxY - screenPoint.y)
-        return Self.hit(p, in: hitRegions)
-    }
-
-    nonisolated static func hit(_ point: CGPoint, in regions: [String: CGRect]) -> String? {
-        // Smallest match wins, so a widget nested in another (weather inside the clock) gets the hover.
-        regions.filter { $0.value.contains(point) }.min { $0.value.width * $0.value.height < $1.value.width * $1.value.height }?.key
+        return HitRegionsKey.hit(p, in: hitRegions)
     }
 
     private func layout() {
