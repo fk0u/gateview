@@ -33,6 +33,49 @@ final class PrayerTimeService {
         return day
     }
 
+    private var monthCache: [String: [PrayerDay]] = [:]
+
+    /// Next 7 days for the detail card. Fetched only when opened, cached per month in memory.
+    func week(city: String, country: String, method: Int, from start: Date = .now) async -> [PrayerDay] {
+        let cal = Calendar.current
+        let dates = (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: start) }
+        var days: [PrayerDay] = []
+        for month in Set(dates.map { cal.dateComponents([.year, .month], from: $0) }) {
+            let key = "\(month.year!)-\(month.month!)|\(city)|\(country)|\(method)"
+            if monthCache[key] == nil {
+                var components = URLComponents(string: "https://api.aladhan.com/v1/calendarByCity/\(month.year!)/\(month.month!)")!
+                components.queryItems = [URLQueryItem(name: "city", value: city), URLQueryItem(name: "country", value: country),
+                                         URLQueryItem(name: "method", value: String(method))]
+                struct Response: Decodable {
+                    struct Item: Decodable {
+                        struct DateInfo: Decodable { struct G: Decodable { let date: String }; let gregorian: G }
+                        let timings: [String: String]; let date: DateInfo
+                    }
+                    let data: [Item]
+                }
+                guard let (data, _) = try? await URLSession.shared.data(from: components.url!),
+                      let r = try? JSONDecoder().decode(Response.self, from: data) else { continue }
+                monthCache[key] = r.data.map { PrayerDay(date: $0.date.gregorian.date, timings: $0.timings) }
+            }
+            days += monthCache[key] ?? []
+        }
+        let wanted = dates.map { Self.dayKey(for: $0) }
+        return wanted.compactMap { w in days.first { $0.date == w } }
+    }
+
+    nonisolated static func time(_ raw: String?, on date: Date) -> Date? {
+        guard let raw else { return nil }
+        let parts = raw.prefix(5).split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2 else { return nil }
+        return Calendar.current.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: date)
+    }
+
+    nonisolated static func date(fromKey key: String) -> Date? {
+        let p = key.split(separator: "-").compactMap { Int($0) }
+        guard p.count == 3 else { return nil }
+        return Calendar.current.date(from: DateComponents(year: p[2], month: p[1], day: p[0]))
+    }
+
     nonisolated static func prayers(from day: PrayerDay, on date: Date = .now, iqamah: [String: Int] = Theme().iqamah) -> [Prayer] {
         let cal = Calendar.current
         let friday = cal.component(.weekday, from: date) == 6

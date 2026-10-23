@@ -1,29 +1,18 @@
 import SwiftUI
 
 struct StatsBarView: View {
-    @State private var stats = SystemStats()
-    @State private var sampler = SystemStatsSampler()
+    @ObservedObject var monitor: SystemStatsMonitor
 
     var body: some View {
+        let stats = monitor.stats
         HStack(spacing: 18) {
-            item("cpu", "CPU \(stats.cpu)%")
-            item("memorychip", "RAM \(stats.ram)%")
+            Label("CPU \(stats.cpu)%", systemImage: "cpu")
+            Label("RAM \(stats.ram)%", systemImage: "memorychip")
             if let battery = stats.battery {
-                item(stats.charging ? "battery.100.bolt" : "battery.75", "\(battery)%")
+                Label("\(battery)%", systemImage: stats.charging ? "battery.100.bolt" : "battery.75")
             }
         }
         .font(.system(size: 13, weight: .medium).monospacedDigit())
         .opacity(0.7)
-        .task {
-            // Only this tiny view updates, every 5 s; cancelled automatically when hidden.
-            while !Task.isCancelled {
-                stats = sampler.sample()
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-            }
-        }
-    }
-
-    private func item(_ symbol: String, _ text: String) -> some View {
-        Label(text, systemImage: symbol).labelStyle(.titleAndIcon)
     }
 }

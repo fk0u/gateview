@@ -7,6 +7,34 @@ struct SystemStats: Equatable {
     var ram = 0
     var battery: Int?   // nil on Macs without a battery
     var charging = false
+    var minutesLeft: Int?   // battery estimate, nil when charging/unknown
+}
+
+/// Samples every 5 s while running and keeps 5 minutes of history for the detail sparkline.
+@MainActor
+final class SystemStatsMonitor: ObservableObject {
+    @Published private(set) var stats = SystemStats()
+    @Published private(set) var history: [SystemStats] = []
+    private let sampler = SystemStatsSampler()
+    private var task: Task<Void, Never>?
+
+    func start() {
+        guard task == nil else { return }
+        task = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let s = self.sampler.sample()
+                self.stats = s
+                self.history = Array((self.history + [s]).suffix(60))
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            }
+        }
+    }
+
+    func stop() {
+        task?.cancel()
+        task = nil
+    }
 }
 
 /// Cheap Mach/IOKit reads; call every few seconds, not every frame.
@@ -21,6 +49,8 @@ final class SystemStatsSampler {
         }
         stats.ram = Self.ramPercent()
         (stats.battery, stats.charging) = Self.battery()
+        let estimate = IOPSGetTimeRemainingEstimate()
+        stats.minutesLeft = estimate > 0 ? Int(estimate / 60) : nil
         return stats
     }
 

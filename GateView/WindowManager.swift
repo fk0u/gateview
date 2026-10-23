@@ -102,7 +102,8 @@ final class WindowManager: ObservableObject {
     }
 
     nonisolated static func hit(_ point: CGPoint, in regions: [String: CGRect]) -> String? {
-        regions.first { $0.value.contains(point) }?.key
+        // Smallest match wins, so a widget nested in another (weather inside the clock) gets the hover.
+        regions.filter { $0.value.contains(point) }.min { $0.value.width * $0.value.height < $1.value.width * $1.value.height }?.key
     }
 
     private func layout() {

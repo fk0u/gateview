@@ -9,9 +9,12 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var events: [Agenda] = []
     @Published private(set) var calendarAuthorized = false
     @Published private(set) var weather: Weather?
+    @Published private(set) var todayTimings: [String: String] = [:] // incl. Imsak, Sunrise for the detail card
+    @Published private(set) var week: [PrayerDay] = []
 
     let nowPlaying = NowPlayingService()
     let reminders = ReminderService()
+    let stats = SystemStatsMonitor()
     private let prayerService = PrayerTimeService()
     private let calendarService = CalendarService()
     private let weatherService = WeatherService()
@@ -45,6 +48,9 @@ final class DashboardViewModel: ObservableObject {
         store.$theme.map(\.temperatureUnit).removeDuplicates().dropFirst()
             .sink { [weak self] _ in Task { await self?.loadWeather() } }
             .store(in: &subscriptions)
+        store.$theme.map(\.showStats).removeDuplicates()
+            .sink { [weak self] on in on ? self?.stats.start() : self?.stats.stop() }
+            .store(in: &subscriptions)
         store.$theme.map(\.showNowPlaying).removeDuplicates()
             .sink { [weak self] on in on ? self?.nowPlaying.start() : self?.nowPlaying.stop() }
             .store(in: &subscriptions)
@@ -65,6 +71,16 @@ final class DashboardViewModel: ObservableObject {
         if force { await loadWeather() }
     }
 
+    func loadWeek() async {
+        guard week.isEmpty else { return }
+        let t = store.theme
+        week = await prayerService.week(city: t.city, country: t.country, method: t.prayerMethod)
+    }
+
+    func detailEvents() -> [Agenda] {
+        calendarAuthorized ? calendarService.upcomingEvents(limit: 8, extraDays: 1) : []
+    }
+
     func rescheduleReminders() async {
         await reminders.schedule(prayers, theme: store.theme)
     }
@@ -74,6 +90,8 @@ final class DashboardViewModel: ObservableObject {
             let t = store.theme
             let day = try await prayerService.todayTimings(city: t.city, country: t.country, method: t.prayerMethod, force: force)
             prayers = PrayerTimeService.prayers(from: day, iqamah: t.iqamah)
+            todayTimings = day.timings
+            week = []
             prayerError = nil
             await rescheduleReminders()
         } catch {
