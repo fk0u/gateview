@@ -20,6 +20,16 @@ struct DashboardView: View {
                 WeatherEffectsView(code: code, intensity: theme.weatherEffects, active: windows.isVisible)
             }
 
+            // The system menu bar is translucent: it shows what's behind it. A dark fade here
+            // turns it into a soft gradient instead of a solid wallpaper-coloured strip.
+            if theme.menuBarScrim > 0 {
+                LinearGradient(colors: [.black.opacity(theme.menuBarScrim), .black.opacity(theme.menuBarScrim * 0.35), .clear],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: 160)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .allowsHitTesting(false)
+            }
+
             // Mood washes a soft colour into the middle of the scrim.
             LinearGradient(colors: [.clear, moodColor.opacity(mood.tintOpacity), .black.opacity(min(theme.scrim + mood.scrimDelta, 0.95))],
                            startPoint: .top, endPoint: .bottom)

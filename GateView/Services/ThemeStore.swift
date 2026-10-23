@@ -13,6 +13,7 @@ struct Theme: Codable, Equatable {
     var panelSide = "right"       // right | left
     var glassTint = 0.25          // 0…1 black over the blur
     var scrim = 0.45              // 0…1 bottom gradient strength
+    var menuBarScrim = 0.4        // 0…1 dark fade behind the (translucent) system menu bar
     var greetingName = ""
 
     // Widgets

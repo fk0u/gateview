@@ -136,6 +136,7 @@ private struct AppearanceSection: View {
             .pickerStyle(.segmented)
             LabeledContent("Glass darkness") { Slider(value: $store.theme.glassTint, in: 0...0.8) }
             LabeledContent("Bottom gradient") { Slider(value: $store.theme.scrim, in: 0...0.9) }
+            LabeledContent("Menu bar fade") { Slider(value: $store.theme.menuBarScrim, in: 0...0.9) }
         }
     }
 }

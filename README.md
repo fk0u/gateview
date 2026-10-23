@@ -22,9 +22,15 @@ An ultra-light ambient dashboard that lives **on your macOS wallpaper**: below e
 
 ## Install
 
-Download the latest `.dmg` from [Releases](../../releases), then drag GateView into Applications.
+Download from [Releases](../../releases/latest):
 
-> The app is ad-hoc signed. On first launch, right-click → **Open** (or System Settings → Privacy & Security → **Open Anyway**).
+- **`.dmg`**: open it and drag GateView into Applications
+- **`.pkg`**: double-click; installs into /Applications
+- **`.zip`**: unzip and move GateView.app wherever you like
+
+All three hold the same Universal app (Apple Silicon + Intel).
+
+> The app and installer aren't notarized. On first launch, right-click → **Open** (or System Settings → Privacy & Security → **Open Anyway**). The .pkg may need the same.
 
 ## Build from source
 
@@ -32,7 +38,7 @@ Requires Xcode 15+ command line tools.
 
 ```bash
 ./build.sh      # → build/GateView.app (arm64 + x86_64)
-./release.sh    # → dist/*.dmg, *.zip, SHA256SUMS.txt
+./release.sh    # → dist/*.dmg, *.pkg, *.zip, SHA256SUMS.txt
 ```
 
 Self-check for the prayer, weather, stats and theme logic:
