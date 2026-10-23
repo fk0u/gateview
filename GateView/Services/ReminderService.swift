@@ -1,68 +1,59 @@
 import AppKit
 import UserNotifications
 
-enum ReminderMode: String, CaseIterable {
-    case off, banner, chime
-    static let storageKey = "GateView.reminderMode"
-
-    var title: String {
-        switch self {
-        case .off: return "Off"
-        case .banner: return "Banner"
-        case .chime: return "Banner + Chime"
-        }
-    }
-
-    static var current: ReminderMode {
-        ReminderMode(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .off
-    }
-}
-
-/// Banner at each adzan (scheduled with the OS, no polling) + optional soft chime.
+/// Banner at each adzan (scheduled with the OS, no polling) + optional soft chime. Settings live in the theme.
 @MainActor
 final class ReminderService {
+    static let modes = [("off", "Off"), ("banner", "Banner"), ("chime", "Banner + Chime")]
+    static let sounds = ["Glass", "Tink", "Purr", "Pop", "Submarine", "Hero"]
+
     private var chimeTask: Task<Void, Never>?
 
-    func schedule(_ prayers: [Prayer], mode: ReminderMode = .current, now: Date = .now) async {
+    func schedule(_ prayers: [Prayer], theme: Theme, now: Date = .now) async {
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
         chimeTask?.cancel()
-        guard mode != .off,
-              (try? await center.requestAuthorization(options: [.alert])) == true || mode == .chime
+        guard theme.reminderMode != "off",
+              (try? await center.requestAuthorization(options: [.alert])) == true || theme.reminderMode == "chime"
         else { return }
 
-        let upcoming = Self.upcoming(prayers, after: now)
+        let upcoming = Self.upcoming(prayers, after: now, enabled: theme.reminders)
         for prayer in upcoming {
             let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: prayer.time)
             let request = UNNotificationRequest(
-                identifier: "prayer.\(prayer.name)",
+                identifier: "prayer.\(prayer.key)",
                 content: Self.content(for: prayer),
                 trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
             )
             try? await center.add(request)
         }
 
-        guard mode == .chime else { return }
+        guard theme.reminderMode == "chime" else { return }
+        let sound = theme.reminderSound
         chimeTask = Task {
             for prayer in upcoming {
                 let wait = prayer.time.timeIntervalSinceNow
                 if wait > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000)) }
                 guard !Task.isCancelled else { return }
-                if Date().timeIntervalSince(prayer.time) < 60 { Self.chime() } // skip if the Mac slept through it
+                if Date().timeIntervalSince(prayer.time) < 60 { Self.play(sound) } // skip if the Mac slept through it
             }
         }
     }
 
-    func test() {
+    func test(theme: Theme) {
         let request = UNNotificationRequest(identifier: "prayer.test", content: Self.content(for: nil), trigger: nil)
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { _, _ in
             UNUserNotificationCenter.current().add(request)
         }
-        if ReminderMode.current == .chime { Self.chime() }
+        if theme.reminderMode == "chime" { Self.play(theme.reminderSound) }
     }
 
-    nonisolated static func upcoming(_ prayers: [Prayer], after now: Date) -> [Prayer] {
-        prayers.filter { $0.time > now }
+    nonisolated static func upcoming(_ prayers: [Prayer], after now: Date, enabled: [String: Bool] = [:]) -> [Prayer] {
+        prayers.filter { $0.time > now && enabled[$0.key] != false }
+    }
+
+    static func play(_ sound: String) {
+        NSSound(named: sound)?.play()
     }
 
     private static func content(for prayer: Prayer?) -> UNMutableNotificationContent {
@@ -80,9 +71,5 @@ final class ReminderService {
         }
         content.sound = nil // silent banner; the chime is our own softer sound
         return content
-    }
-
-    private static func chime() {
-        NSSound(named: "Glass")?.play()
     }
 }

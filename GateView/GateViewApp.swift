@@ -8,7 +8,7 @@ struct GateViewApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(windows: delegate.windows, viewModel: delegate.viewModel, store: ThemeStore.shared, openSettings: delegate.openSettings)
+            MenuContent(windows: delegate.windows, viewModel: delegate.viewModel, store: .shared, openSettings: delegate.openSettings)
         } label: {
             Image("MenuBarIcon") // template image: follows light/dark menu bar
         }
@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         windows.show(viewModel: viewModel)
 
-        // Turn on launch-at-login once; afterwards respect the user's choice (menu / System Settings).
+        // Turn on launch-at-login once; afterwards respect the user's choice (Settings / System Settings).
         let key = "GateView.didEnableLoginItem"
         if !UserDefaults.standard.bool(forKey: key) {
             try? SMAppService.mainApp.register()
@@ -36,10 +36,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func openSettings() {
         if settingsWindow == nil {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView(store: .shared)))
+            let root = SettingsView(store: .shared, windows: windows) { [weak self] in
+                self?.viewModel.reminders.test(theme: ThemeStore.shared.theme)
+            }
+            let window = NSWindow(contentViewController: NSHostingController(rootView: root))
             window.title = "GateView Settings"
-            window.styleMask = [.titled, .closable]
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+            window.toolbarStyle = .unified
             window.isReleasedWhenClosed = false
+            window.setContentSize(NSSize(width: 820, height: 620))
             window.center()
             settingsWindow = window
         }
@@ -59,35 +64,14 @@ private struct MenuContent: View {
     let viewModel: DashboardViewModel
     @ObservedObject var store: ThemeStore
     let openSettings: () -> Void
-    @AppStorage(ReminderMode.storageKey) private var reminder = ReminderMode.off.rawValue
 
     var body: some View {
-        Toggle("Click-Through", isOn: $windows.clickThrough)
-            .keyboardShortcut("t")
-        Menu("Widgets") {
-            Toggle("Weather", isOn: $store.theme.showWeather)
-            Toggle("Agenda", isOn: $store.theme.showAgenda)
-            Toggle("Now Playing", isOn: $store.theme.showNowPlaying)
-            Toggle("System Stats", isOn: $store.theme.showStats)
-        }
-        Menu("Prayer Reminder") {
-            Picker("Prayer Reminder", selection: Binding(get: { reminder }, set: { mode in
-                reminder = mode
-                Task { await viewModel.rescheduleReminders() }
-            })) {
-                ForEach(ReminderMode.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
-            }
-            .pickerStyle(.inline)
-            .labelsHidden()
-            Divider()
-            Button("Test Reminder") { viewModel.reminders.test() }
-        }
         Button("Settings…", action: openSettings)
             .keyboardShortcut(",")
         Divider()
-        Toggle("Launch at Login", isOn: Binding(get: { SMAppService.mainApp.status == .enabled }, set: { on in
-            try? on ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
-        }))
+        Toggle("Interactive Widgets", isOn: $store.theme.interactive)
+        Toggle("Click-Through Everywhere", isOn: $windows.clickThrough)
+            .keyboardShortcut("t")
         Button("Refresh") { Task { await viewModel.refresh(force: true) } }
             .keyboardShortcut("r")
         Divider()

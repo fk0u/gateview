@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import SwiftUI
 
 /// Everything a user can customize. Stored as ~/.config/gateview/theme.json (hand-editable, live-reloaded).
@@ -19,6 +20,21 @@ struct Theme: Codable, Equatable {
     var showNowPlaying = true
     var showStats = true
     var showAgenda = true
+    var widgetOrder = ["prayer", "agenda", "nowPlaying"] // right-panel order
+    var interactive = true        // hover + click widgets for details
+    var displayIndex = 0          // 0 = main screen
+
+    // Motion & mood
+    var accentMode = "custom"     // custom | wallpaper
+    var motion = true
+    var mood = true               // tint follows time of day / prayer
+    var weatherEffects = "subtle" // off | subtle | full
+
+    // Reminder
+    var reminderMode = "off"      // off | banner | chime
+    var reminderSound = "Glass"
+    var reminders = ["Fajr": true, "Dhuhr": true, "Asr": true, "Maghrib": true, "Isha": true]
+    var temperatureUnit = "celsius" // celsius | fahrenheit
 
     // Location (prayer times + weather)
     var city = "Samarinda"
@@ -37,6 +53,15 @@ struct Theme: Codable, Equatable {
         merged.merge(user) { _, new in new }
         return try JSONDecoder().decode(Theme.self, from: JSONSerialization.data(withJSONObject: merged))
     }
+
+    /// One-tap looks. Only touch appearance keys; location, widgets and reminders stay.
+    static let presets: [(name: String, apply: (inout Theme) -> Void)] = [
+        ("Golden Gate", { $0.accent = "#FFC56B"; $0.font = "default"; $0.clockWeight = "ultraLight"; $0.glassTint = 0.25; $0.scrim = 0.45; $0.accentMode = "custom" }),
+        ("Midnight", { $0.accent = "#8AB4FF"; $0.font = "default"; $0.clockWeight = "thin"; $0.glassTint = 0.5; $0.scrim = 0.65; $0.accentMode = "custom" }),
+        ("Aurora", { $0.accent = "#7EE2A8"; $0.font = "rounded"; $0.clockWeight = "light"; $0.glassTint = 0.3; $0.scrim = 0.5; $0.accentMode = "custom" }),
+        ("Sahara", { $0.accent = "#F2A65A"; $0.font = "serif"; $0.clockWeight = "light"; $0.glassTint = 0.2; $0.scrim = 0.4; $0.accentMode = "custom" }),
+        ("Wallpaper", { $0.accentMode = "wallpaper"; $0.font = "default"; $0.clockWeight = "ultraLight"; $0.glassTint = 0.15; $0.scrim = 0.35 }),
+    ]
 
     var locationKey: String { "\(city)|\(country)|\(latitude)|\(longitude)|\(prayerMethod)|\(iqamah.sorted { $0.key < $1.key })" }
 
@@ -85,6 +110,28 @@ final class ThemeStore: ObservableObject {
     func reveal() { NSWorkspace.shared.activateFileViewerSelecting([Self.url]) }
 
     func openInEditor() { NSWorkspace.shared.open(Self.url) }
+
+    func exportTheme() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "gateview-theme.json"
+        panel.allowedContentTypes = [.json]
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? FileManager.default.copyItem(at: Self.url, to: url)
+    }
+
+    func importTheme() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            theme = try Theme.decode(Data(contentsOf: url))
+            loadError = nil
+        } catch {
+            loadError = "Import gagal: \(error.localizedDescription)"
+        }
+    }
 
     private func save() {
         try? FileManager.default.createDirectory(at: Self.url.deletingLastPathComponent(), withIntermediateDirectories: true)

@@ -44,9 +44,9 @@ final class PrayerTimeService {
                   let time = cal.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: date)
             else { return nil }
             if friday && key == "Dhuhr" {
-                return Prayer(name: "Jumat", time: time, iqamah: nil, isJumat: true)
+                return Prayer(name: "Jumat", time: time, iqamah: nil, isJumat: true, key: key)
             }
-            return Prayer(name: label, time: time, iqamah: time.addingTimeInterval(Double((iqamah[key] ?? 10) * 60)))
+            return Prayer(name: label, time: time, iqamah: time.addingTimeInterval(Double((iqamah[key] ?? 10) * 60)), key: key)
         }
     }
 
@@ -63,7 +63,7 @@ final class PrayerTimeService {
         // ponytail: after Isya, tomorrow's Subuh ≈ today's + 1 day (off by ~1 min); real value loads at midnight.
         guard let fajr = prayers.first else { return nil }
         let day: TimeInterval = 86_400
-        return Prayer(name: fajr.name, time: fajr.time + day, iqamah: fajr.iqamah.map { $0 + day })
+        return Prayer(name: fajr.name, time: fajr.time + day, iqamah: fajr.iqamah.map { $0 + day }, key: fajr.key)
     }
 
     nonisolated static func countdown(to target: Date, from now: Date) -> String {

@@ -11,6 +11,7 @@ struct Prayer: Identifiable, Equatable {
     let time: Date      // adzan
     let iqamah: Date?   // nil for Jumat (khutbah comes first)
     var isJumat = false
+    var key = ""        // Aladhan key: Fajr, Dhuhr, Asr, Maghrib, Isha
     var id: String { name }
 
     /// When the congregation is roughly over.

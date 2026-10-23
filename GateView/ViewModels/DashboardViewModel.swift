@@ -38,6 +38,13 @@ final class DashboardViewModel: ObservableObject {
         store.$theme.map(\.locationKey).removeDuplicates().dropFirst()
             .sink { [weak self] _ in Task { await self?.refresh(force: true) } }
             .store(in: &subscriptions)
+        store.$theme.map { "\($0.reminderMode)|\($0.reminderSound)|\($0.reminders.sorted { $0.key < $1.key })" }
+            .removeDuplicates().dropFirst()
+            .sink { [weak self] _ in Task { await self?.rescheduleReminders() } }
+            .store(in: &subscriptions)
+        store.$theme.map(\.temperatureUnit).removeDuplicates().dropFirst()
+            .sink { [weak self] _ in Task { await self?.loadWeather() } }
+            .store(in: &subscriptions)
         store.$theme.map(\.showNowPlaying).removeDuplicates()
             .sink { [weak self] on in on ? self?.nowPlaying.start() : self?.nowPlaying.stop() }
             .store(in: &subscriptions)
@@ -59,7 +66,7 @@ final class DashboardViewModel: ObservableObject {
     }
 
     func rescheduleReminders() async {
-        await reminders.schedule(prayers)
+        await reminders.schedule(prayers, theme: store.theme)
     }
 
     private func loadPrayers(force: Bool) async {
@@ -75,7 +82,7 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private func loadWeather() async {
-        if let fresh = try? await weatherService.current(latitude: store.theme.latitude, longitude: store.theme.longitude) { weather = fresh } // keep last value on failure
+        if let fresh = try? await weatherService.fetch(latitude: store.theme.latitude, longitude: store.theme.longitude, unit: store.theme.temperatureUnit) { weather = fresh } // keep last value on failure
     }
 
     private func loadEvents() {
