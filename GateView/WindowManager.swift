@@ -37,7 +37,9 @@ final class WindowManager: ObservableObject {
             backing: .buffered,
             defer: false
         )
-        window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)))
+        // One above Finder's desktop-icon window (which covers the whole screen and would swallow clicks),
+        // still below every app window. Elsewhere the window stays click-through, so icons keep working.
+        window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = false
@@ -45,7 +47,7 @@ final class WindowManager: ObservableObject {
         window.ignoresMouseEvents = true
         window.acceptsMouseMovedEvents = true
         window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: DashboardView(viewModel: viewModel, windows: self, store: .shared))
+        window.contentView = FirstClickHostingView(rootView: DashboardView(viewModel: viewModel, windows: self, store: .shared))
         self.window = window
         layout()
         window.orderFrontRegardless()
@@ -123,4 +125,9 @@ final class WindowManager: ObservableObject {
 final class DesktopWindow: NSWindow {
     var allowsKey = false
     override var canBecomeKey: Bool { allowsKey }
+}
+
+/// GateView is never the active app; without this the first click on a widget would be eaten by activation.
+final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
