@@ -84,7 +84,7 @@ final class WindowManager: ObservableObject {
         guard let window else { return }
         let id = clickThrough || !store.theme.interactive ? nil : region(at: NSEvent.mouseLocation)
         if hovered != id { hovered = id }
-        window.ignoresMouseEvents = id == nil
+        if window.ignoresMouseEvents != (id == nil) { window.ignoresMouseEvents = id == nil } // window-server call: only on change
     }
 
     private func region(at screenPoint: NSPoint) -> String? {

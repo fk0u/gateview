@@ -1,4 +1,4 @@
-// Run: swiftc GateView/Models/PrayerTimeModel.swift GateView/Services/PrayerTimeService.swift GateView/Services/WeatherService.swift GateView/Services/SystemStatsService.swift GateView/Services/ReminderService.swift GateView/Services/ThemeStore.swift Tests/main.swift -o /tmp/pcheck && /tmp/pcheck
+// Run: swiftc GateView/Models/*.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore,MoodEngine,WallpaperColorService}.swift Tests/main.swift -o /tmp/gv-check && /tmp/gv-check
 import Foundation
 import SwiftUI
 
@@ -39,4 +39,37 @@ assert((try? Theme.decode(Data("{oops".utf8))) == nil)
 assert(Color(hex: "#00FF88") != nil && Color(hex: "nope") == nil)
 let custom = PrayerTimeService.prayers(from: day, on: thursday, iqamah: ["Maghrib": 3])
 assert(custom[3].iqamah == custom[3].time.addingTimeInterval(180))
+// Reminders respect per-prayer toggles
+assert(ReminderService.upcoming(fri, after: at(11, 0, friday), enabled: ["Asr": false]).map(\.name) == ["Jumat", "Maghrib", "Isya"])
+
+// Mood follows the day
+assert(MoodEngine.mood(at: at(3, 0, friday), prayers: fri).name == "night")
+assert(MoodEngine.mood(at: at(5, 0, friday), prayers: fri).name == "dawn")
+assert(MoodEngine.mood(at: at(10, 0, friday), prayers: fri).name == "day")
+let early = MoodEngine.mood(at: at(15, 30, friday), prayers: fri), late = MoodEngine.mood(at: at(17, 45, friday), prayers: fri)
+assert(early.name == "golden" && late.tintOpacity > early.tintOpacity) // warmer toward Maghrib
+assert(MoodEngine.mood(at: at(18, 30, friday), prayers: fri).name == "dusk")
+assert(MoodEngine.mood(at: at(23, 0, friday), prayers: fri).name == "night")
+
+// Wallpaper colour: saturated orange beats a larger grey area
+let px = Array(repeating: (0.5, 0.5, 0.5), count: 600) + Array(repeating: (0.95, 0.5, 0.1), count: 200)
+let dom = WallpaperColorService.dominant(px)!
+assert(dom.h > 0.04 && dom.h < 0.12)
+assert(WallpaperColorService.dominant(Array(repeating: (0.5, 0.5, 0.5), count: 10)) == nil)
+
+// Hit regions: nested (smaller) widget wins
+let regions = ["clock": CGRect(x: 0, y: 0, width: 500, height: 300), "weather": CGRect(x: 300, y: 0, width: 150, height: 40)]
+assert(HitRegionsKey.hit(CGPoint(x: 310, y: 10), in: regions) == "weather")
+assert(HitRegionsKey.hit(CGPoint(x: 10, y: 200), in: regions) == "clock")
+assert(HitRegionsKey.hit(CGPoint(x: 900, y: 10), in: regions) == nil)
+
+// A 1.2-era theme.json still loads, new keys get defaults
+let old = try! Theme.decode(Data(##"{"accent": "#FFC56B", "showWeather": false}"##.utf8))
+assert(!old.showWeather && old.interactive && old.weatherEffects == "subtle" && old.widgetOrder.count == 3)
+
+// Weather detail parsing
+let sample = Data(##"{"utc_offset_seconds":28800,"current":{"temperature_2m":29.6,"apparent_temperature":33.1,"wind_speed_10m":7.2,"relative_humidity_2m":80,"weather_code":63,"is_day":1},"hourly":{"time":["2026-10-23T15:00","2026-10-23T16:00"],"temperature_2m":[30,29],"weather_code":[3,61],"precipitation_probability":[20,null],"is_day":[1,1]},"daily":{"time":["2026-10-23","2026-10-24"],"weather_code":[63,1],"temperature_2m_max":[31.4,32],"temperature_2m_min":[24.2,24.8],"precipitation_probability_max":[80,null]}}"##.utf8)
+let w = try! WeatherService.parse(sample, now: at(14, 0, friday))
+assert(w.temperature == 30 && w.feelsLike == 33 && w.label == "Hujan" && w.code == 63)
+assert(w.hourly.count == 2 && w.hourly[1].rainChance == 0 && w.daily.count == 1 && w.daily[0].max == 32)
 print("ok", PrayerTimeService.hijri(friday))

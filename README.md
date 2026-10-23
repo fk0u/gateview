@@ -4,7 +4,7 @@
 
 An ultra-light ambient dashboard that lives **on your macOS wallpaper**: below every window, on every Space, with click-through on by default. Inspired by the Apple TV screensaver and the macOS Golden Gate wallpaper.
 
-**~15 MB RAM · ~0% CPU idle · Universal (Apple Silicon + Intel) · macOS 13 Ventura+ · zero dependencies**
+**~16 MB RAM · ~2% CPU · Universal (Apple Silicon + Intel) · macOS 13 Ventura+ · zero dependencies**
 
 ## Features
 
@@ -16,7 +16,9 @@ An ultra-light ambient dashboard that lives **on your macOS wallpaper**: below e
 - **Agenda**: next 3 events today from Apple Calendar
 - **System stats**: CPU, RAM, battery
 - **Real glass**: behind-window blur of your wallpaper, not a flat card
-- **Customizable**: Settings window (⌘,) plus a live-reloading `~/.config/gateview/theme.json`
+- **Interactive**: hover a widget, click it to open details (full prayer schedule and 7 days, hourly and 5-day weather, agenda for tomorrow, music controls, CPU/RAM sparkline, month calendar with Hijri dates). Everywhere else stays click-through.
+- **Alive**: rolling digits, a mood tint that follows the day (cool Subuh, golden before Maghrib, calm night), an accent that can follow your wallpaper, and live rain, storm and fog drawn by Core Animation on the GPU
+- **Settings app**: sidebar, presets, city search, per-prayer reminders and sounds, live preview, plus a live-reloading `~/.config/gateview/theme.json`
 
 ## Install
 
@@ -36,7 +38,7 @@ Requires Xcode 15+ command line tools.
 Self-check for the prayer, weather, stats and theme logic:
 
 ```bash
-swiftc GateView/Models/PrayerTimeModel.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore}.swift Tests/main.swift -o /tmp/gv-check && /tmp/gv-check
+swiftc GateView/Models/*.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore,MoodEngine,WallpaperColorService}.swift Tests/main.swift -o /tmp/gv-check && /tmp/gv-check
 ```
 
 ## Customize
@@ -67,6 +69,12 @@ Use the menu bar icon → **Settings…**, or edit `~/.config/gateview/theme.jso
 | `showWeather`, `showAgenda`, `showNowPlaying`, `showStats` | widgets on/off |
 | `city`, `country`, `prayerMethod`, `latitude`, `longitude` | location ([method ids](https://aladhan.com/calculation-methods)) |
 | `iqamah` | minutes after adzan, per `Fajr`/`Dhuhr`/`Asr`/`Maghrib`/`Isha` |
+| `accentMode` | `custom` · `wallpaper` |
+| `motion`, `mood`, `interactive` | animations, time/prayer tint, clickable widgets |
+| `weatherEffects` | `off` · `subtle` · `full` |
+| `widgetOrder` | e.g. `["prayer", "nowPlaying", "agenda"]` |
+| `reminderMode`, `reminderSound`, `reminders` | `off`/`banner`/`chime`, a system sound name, per-prayer on/off |
+| `temperatureUnit`, `displayIndex` | `celsius`/`fahrenheit`, which screen (0 = main) |
 
 ## Notes
 
@@ -80,8 +88,8 @@ GateView/
 ├── GateViewApp.swift        app entry, menu bar, settings window
 ├── WindowManager.swift      desktop-level, click-through overlay window
 ├── DashboardView.swift      layout + glass
-├── Views/                   clock, prayer, agenda, weather, now playing, stats, settings
+├── Views/                   widgets, Details/ cards, Settings/ app, weather effects, motion
 ├── ViewModels/              DashboardViewModel
-├── Services/                prayer, weather, calendar, now playing, stats, reminder, theme
+├── Services/                prayer, weather, calendar, now playing, stats, reminder, theme, mood, wallpaper colour
 └── Models/
 ```

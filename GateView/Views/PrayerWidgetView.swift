@@ -12,17 +12,20 @@ struct PrayerWidgetView: View {
                 header(Date())
                 Text(error ?? "Loading prayer times…").opacity(0.7)
             } else {
+                // Only the countdown needs 1 s updates; header and row change at most once a minute.
+                TimelineView(.everyMinute) { context in header(context.date) }
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    VStack(alignment: .leading, spacing: 14) {
-                        header(context.date)
-                        if let phase = PrayerTimeService.phase(at: context.date, in: prayers) {
-                            hero(phase, now: context.date)
-                                .id(caption(of: phase)) // new phase → cross-fade
-                                .transition(.opacity)
-                            row(highlight: phase, now: context.date)
-                        }
+                    if let phase = PrayerTimeService.phase(at: context.date, in: prayers) {
+                        hero(phase, now: context.date)
+                            .id(caption(of: phase)) // new phase → cross-fade
+                            .transition(.opacity)
+                            .motion(.easeInOut(duration: 0.6), value: caption(of: phase), enabled: motion)
                     }
-                    .motion(.easeInOut(duration: 0.6), value: PrayerTimeService.phase(at: context.date, in: prayers).map(caption), enabled: motion)
+                }
+                TimelineView(.everyMinute) { context in
+                    if let phase = PrayerTimeService.phase(at: context.date, in: prayers) {
+                        row(highlight: phase, now: context.date)
+                    }
                 }
             }
         }
