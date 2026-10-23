@@ -37,17 +37,20 @@ struct InteractiveCard<Content: View>: View {
             .padding(-plate)
             .scaleEffect(motion && !reduceMotion ? (pressed ? 0.98 : hovered && !expanded ? 1.015 : 1) : 1)
             .brightness(hovered && !expanded ? 0.04 : 0)
-            .simultaneousGesture(DragGesture(minimumDistance: 0)
+            // One gesture for press + click: a separate onTapGesture never fired next to a 0-distance drag.
+            // `.gesture` (not simultaneous) lets buttons, sliders and the notes editor inside a card win.
+            .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { _ in if !pressed { pressed = true } }
-                .onEnded { _ in pressed = false })
-            .onTapGesture {
-                let change = { windows.expanded = expanded ? nil : id }
-                if motion && !reduceMotion {
-                    withAnimation(.spring(response: 0.45, dampingFraction: 0.86), change)
-                } else {
-                    change()
-                }
-            }
+                .onEnded { value in
+                    pressed = false
+                    guard abs(value.translation.width) < 6, abs(value.translation.height) < 6 else { return } // a drag, not a click
+                    let change = { windows.expanded = expanded ? nil : id }
+                    if motion && !reduceMotion {
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.86), change)
+                    } else {
+                        change()
+                    }
+                })
             .animation(.easeOut(duration: 0.18), value: hovered)
             .animation(.spring(response: 0.25, dampingFraction: 0.6), value: pressed)
     }

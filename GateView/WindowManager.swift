@@ -33,10 +33,12 @@ final class WindowManager: ObservableObject {
     func show(viewModel: DashboardViewModel) {
         let window = DesktopWindow(
             contentRect: .zero,
-            styleMask: [.borderless, .fullSizeContentView],
+            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        window.hidesOnDeactivate = false // panels hide when their app deactivates by default
+        window.becomesKeyOnlyIfNeeded = false
         // One above Finder's desktop-icon window (which covers the whole screen and would swallow clicks),
         // still below every app window. Elsewhere the window stays click-through, so icons keep working.
         window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
@@ -87,9 +89,7 @@ final class WindowManager: ObservableObject {
     /// Typing in Notes needs keyboard focus, which a desktop-level window normally never gets.
     private func updateKeyFocus() {
         guard let window else { return }
-        let typing = expanded == "notes"
-        window.allowsKey = typing
-        if typing {
+        if expanded == "notes" {
             NSApp.activate(ignoringOtherApps: true)
             window.makeKey()
         } else if window.isKeyWindow {
@@ -121,10 +121,10 @@ final class WindowManager: ObservableObject {
     }
 }
 
-/// Borderless windows refuse key status; this one accepts it only while Notes is being edited.
-final class DesktopWindow: NSWindow {
-    var allowsKey = false
-    override var canBecomeKey: Bool { allowsKey }
+/// SwiftUI gestures and buttons only respond in a window that can become key. A non-activating panel can,
+/// without activating GateView or stealing focus from the app you're using.
+final class DesktopWindow: NSPanel {
+    override var canBecomeKey: Bool { true }
 }
 
 /// GateView is never the active app; without this the first click on a widget would be eaten by activation.
