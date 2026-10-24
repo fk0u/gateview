@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  swift:
+    name: macOS (Swift app)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build -c release
+      - name: Self-check
+        run: |
+          swiftc GateView/Models/*.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore,MoodEngine,WallpaperColorService,NowPlayingService,AppleScriptNowPlaying,RemindersService,GalleryService,L10n}.swift Tests/main.swift -o /tmp/gv-check
+          /tmp/gv-check
+
+  rust:
+    name: Rust core (Windows/Linux engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Tests (unit + Swift golden dataset)
+        run: cargo test --workspace

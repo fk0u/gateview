@@ -2,6 +2,11 @@
 
 All notable changes to GateView. The app follows semver-ish numbering; every release ships as a universal (Apple Silicon + Intel) build.
 
+## Unreleased
+
+### Added
+- **Rust engine, milestone M0** (`crates/gateview-core`): the platform-agnostic core for the upcoming Windows & Linux ports — prayer times (Aladhan), weather + air-quality parsing, countdown, mood, Indonesian/English strings, `theme.json` decoding, and the Umm al-Qura Hijri calendar. Verified against a golden dataset printed by the Swift app itself (prayer times identical to the minute); CI now runs both engines (macOS Swift self-check + `cargo test`).
+
 ## 2.3.0 — 2026-10-24
 
 ### Added

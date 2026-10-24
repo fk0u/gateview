@@ -1,6 +1,8 @@
 # GateView on Windows & Linux — Rust Architecture
 
-Status: proposal, October 2026. macOS GateView (Swift/SwiftUI, shipped as v2.3) stays as-is; this document covers the second front: **Windows + Linux (.deb)**, where the headline feature is a **macOS-style Dock that replaces the taskbar / native dock**, plus a **macOS-style menu bar**.
+Status: **M0 done** (October 2026) — `crates/gateview-core` exists and passes 26 tests, including a **golden dataset printed by the Swift app itself** (`Tests/golden.swift` → `crates/gateview-core/tests/golden.rs`): prayer times to the minute, iqamah offsets, countdown format, Hijri dates and theme.json decoding are verified identical. One finding: ICU4X's bundled Umm-al-Qura computation drifts a day from Apple's calendar on some month boundaries, so the exact month-start table (AH 1441–1472) is exported from Swift into `Tests/fixtures/umm-alqura-months.json` and consumed by Rust (ICU remains the fallback outside that range).
+
+macOS GateView (Swift/SwiftUI, shipped as v2.3) stays as-is; this document covers the second front: **Windows + Linux (.deb)**, where the headline feature is a **macOS-style Dock that replaces the taskbar / native dock**, plus a **macOS-style menu bar**.
 
 ---
 
@@ -100,7 +102,7 @@ Both bundle webview dependencies: Windows uses WebView2 (preinstalled on Win11, 
 
 ## 7. Milestones
 
-- **M0 — core extraction (weeks 1–2):** `gateview-core` with prayer/weather/countdown/config/l10n + Rust test suite mirroring `Tests/main.swift`. Deliverable: same numbers as the Swift implementation on a golden dataset (assert prayer times equal to the minute).
+- **M0 — core extraction ✅ (done 2026-10-24):** `crates/gateview-core` with prayer/weather/countdown/config/l10n/mood/hijri + Rust test suite; golden dataset asserts equality with the Swift implementation to the minute (see header note).
 - **M1 — Windows MVP (weeks 3–6):** Tauri shell, dashboard widgets (clock, prayer, weather+AQ, Now Playing via SMTC, countdown, notes), auto-hide-on-fullscreen, glass/acrylic, installer. No dock yet — dashboard first.
 - **M2 — Dock & menu bar Windows (weeks 7–10):** AppBar edge reservation, magnification, pins, tray area.
 - **M3 — Linux MVP + .deb (weeks 11–14):** same widget set, MPRIS, notifications, KDE layer-shell dock, X11 strut fallback, `.deb` + AppImage.

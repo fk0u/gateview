@@ -1,0 +1,16 @@
+[package]
+name = "gateview-core"
+description = "Platform-agnostic engine for GateView: prayer times, weather, countdown, config, localization."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+ureq = { version = "2", features = ["json"] }
+icu_calendar = "1.5"
+
+[dev-dependencies]
+chrono-tz = "0.9"

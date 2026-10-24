@@ -1,5 +1,15 @@
 <p align="center"><img src="docs/banner.png" alt="GateView — ambient desktop dashboard for macOS" width="100%"></p>
 
+<p align="center">
+  <a href="https://github.com/fk0u/gateview/actions/workflows/ci.yml"><img src="https://github.com/fk0u/gateview/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/version-2.3.0-FFC56B" alt="Version 2.3.0">
+  <img src="https://img.shields.io/badge/macOS-13%2B_Ventura-black?logo=apple&logoColor=white" alt="Ready for macOS 13+">
+  <img src="https://img.shields.io/badge/Apple_Silicon_%2B_Intel-universal-0A84FF" alt="Universal binary">
+  <img src="https://img.shields.io/badge/RAM-~16_MB-34C759" alt="~16 MB RAM">
+  <img src="https://img.shields.io/badge/CPU-~2%25-34C759" alt="~2% CPU">
+  <a href="docs/CROSSPLATFORM.md"><img src="https://img.shields.io/badge/Windows_%2B_Linux-coming_soon_(Rust)-F08A3C" alt="Windows & Linux coming soon"></a>
+</p>
+
 # GateView
 
 An ultra-light ambient dashboard that lives **on your macOS wallpaper**: below every window, on every Space, with click-through on by default. Inspired by the Apple TV screensaver and the macOS Golden Gate wallpaper. ([Changelog](CHANGELOG.md) · [Windows & Linux roadmap](docs/CROSSPLATFORM.md))
@@ -107,11 +117,10 @@ Use the menu bar icon → **Settings…**, or edit `~/.config/gateview/theme.jso
 
 ```
 GateView/
-├── GateViewApp.swift        app entry, menu bar, settings window
-├── WindowManager.swift      desktop-level, click-through overlay window
-├── DashboardView.swift      layout + glass
-├── Views/                   widgets, Details/ cards, Settings/ app, weather effects, motion
-├── ViewModels/              DashboardViewModel
-├── Services/                prayer, weather (+air quality), calendar, reminders, now playing (+AppleScript fallback), stats, reminder/adhan, countdown, theme, mood, wallpaper colour, update check
-└── Models/
+├── GateView/                macOS app (Swift/SwiftUI)
+├── crates/gateview-core/    Rust engine for Windows & Linux (prayer, weather, config…) — M0
+├── Tests/                   self-check, golden dataset + fixtures shared by both engines
+├── docs/                    banner, architecture (CROSSPLATFORM.md)
+├── Casks/                   Homebrew cask
+└── build.sh / release.sh    build + package + notarize
 ```
