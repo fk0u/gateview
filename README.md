@@ -2,7 +2,7 @@
 
 # GateView
 
-An ultra-light ambient dashboard that lives **on your macOS wallpaper**: below every window, on every Space, with click-through on by default. Inspired by the Apple TV screensaver and the macOS Golden Gate wallpaper.
+An ultra-light ambient dashboard that lives **on your macOS wallpaper**: below every window, on every Space, with click-through on by default. Inspired by the Apple TV screensaver and the macOS Golden Gate wallpaper. ([Changelog](CHANGELOG.md) · [Windows & Linux roadmap](docs/CROSSPLATFORM.md))
 
 **~16 MB RAM · ~2% CPU · Universal (Apple Silicon + Intel) · macOS 13 Ventura+ · zero dependencies**
 
@@ -95,7 +95,7 @@ Use the menu bar icon → **Settings…**, or edit `~/.config/gateview/theme.jso
 
 ## Roadmap
 
-- **Windows & Linux (.deb) — coming soon.** GateView is coming to other desktops, with a bigger ambition than a port: a macOS-style **Dock** that replaces the Windows taskbar / Linux dock, and a macOS-style **menu bar** on top of the screen — the same ambient dashboard (clock, prayer times, weather, Now Playing, widgets) behind it all.
+- **Windows & Linux (.deb) — coming soon.** GateView is coming to other desktops, with a bigger ambition than a port: a macOS-style **Dock** that replaces the Windows taskbar / Linux dock, and a macOS-style **menu bar** on top of the screen — the same ambient dashboard (clock, prayer times, weather, Now Playing, widgets) behind it all. The plan: a **Rust engine** (`gateview-core`, one shared implementation of prayer times, weather, config and localization) with a Tauri 2 shell — full breakdown, feature mapping and milestones in [docs/CROSSPLATFORM.md](docs/CROSSPLATFORM.md).
 
 ## Notes
 
