@@ -6,6 +6,8 @@ All notable changes to GateView. The app follows semver-ish numbering; every rel
 
 ### Added
 - **Rust engine, milestone M0** (`crates/gateview-core`): the platform-agnostic core for the upcoming Windows & Linux ports — prayer times (Aladhan), weather + air-quality parsing, countdown, mood, Indonesian/English strings, `theme.json` decoding, and the Umm al-Qura Hijri calendar. Verified against a golden dataset printed by the Swift app itself (prayer times identical to the minute); CI now runs both engines (macOS Swift self-check + `cargo test`).
+- **Windows shell, milestone M1** (`app/src-tauri` + `app/ui` + `crates/gateview-providers`): Tauri 2 overlay — transparent, always-on-top, click-through outside widgets; clock, prayer times with phase countdown, weather + air quality, Now Playing via the Windows SMTC API (with artwork), Countdown and Notes widgets; acrylic glass; theme.json live reload (same schema as macOS); adzan reminders with audio playback; auto-hide on fullscreen apps. Type-checked for `x86_64-pc-windows-msvc`; the .msi build itself runs on Windows.
+
 
 ## 2.3.0 — 2026-10-24
 

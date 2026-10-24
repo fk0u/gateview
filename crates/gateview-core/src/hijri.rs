@@ -71,7 +71,7 @@ pub fn hijri_id_from_ymd(date: impl Datelike) -> Option<String> {
 }
 
 /// Days in a Hijri month (for callers that need the month end; within the table).
-pub fn days_in_month(year: i32, month: u32, of_year: i32, of_month: u32) -> Option<u32> {
+pub fn days_in_month(year: i32, month: u32) -> Option<u32> {
     let rows: Vec<MonthStart> = serde_json::from_str(MONTH_TABLE).ok()?;
     let target = (year, month);
     let mut starts = rows.iter().filter_map(|r| Some((NaiveDate::parse_from_str(&r.g, "%Y-%m-%d").ok()?, parse_h(&r.h)?)));
@@ -100,6 +100,7 @@ mod tests {
     #[test]
     fn month_lengths_exist() {
         // Ramadan 1447 began 2026-02-19; its length is 29 or 30 days.
-        assert!(days_in_month(1447, 9, 1447, 9).unwrap_or(0) == 29 || days_in_month(1447, 9, 1447, 9).unwrap_or(0) == 30);
+        let len = days_in_month(1447, 9).unwrap_or(0);
+        assert!(len == 29 || len == 30);
     }
 }

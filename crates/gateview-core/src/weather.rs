@@ -3,7 +3,7 @@
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use serde::Deserialize;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
 pub struct Hour {
     pub time: DateTime<Utc>,
     pub temperature: i64,
@@ -11,7 +11,7 @@ pub struct Hour {
     pub rain_chance: i64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
 pub struct Day {
     pub date: DateTime<Utc>,
     pub min: i64,
@@ -20,7 +20,7 @@ pub struct Day {
     pub rain_chance: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
 pub struct Weather {
     pub temperature: i64,
     pub code: i64,
@@ -126,6 +126,35 @@ pub fn parse(data: &[u8], now: DateTime<Utc>) -> Result<Weather, String> {
     })
 }
 
+/// Fetch the forecast (mirrors WeatherService.fetch's Open-Meteo query; air quality is a
+/// separate call so a failure there can't kill the forecast).
+pub fn fetch_forecast(latitude: f64, longitude: f64, unit: &str) -> Result<Weather, String> {
+    let body = ureq::get("https://api.open-meteo.com/v1/forecast")
+        .query("latitude", &latitude.to_string())
+        .query("longitude", &longitude.to_string())
+        .query("current", "temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,is_day")
+        .query("hourly", "temperature_2m,weather_code,precipitation_probability,is_day")
+        .query("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max")
+        .query("forecast_days", "6")
+        .query("temperature_unit", unit)
+        .query("timezone", "auto")
+        .call()
+        .map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut body.into_reader(), &mut bytes).map_err(|e| e.to_string())?;
+    parse(&bytes, chrono::Utc::now())
+}
+
+/// Fetch forecast + air quality, like the Swift `fetch`. AQ failure → None fields.
+pub fn fetch(latitude: f64, longitude: f64, unit: &str) -> Result<Weather, String> {
+    let mut weather = fetch_forecast(latitude, longitude, unit)?;
+    if let Some((aqi, pm25)) = air_quality(latitude, longitude) {
+        weather.aqi = Some(aqi);
+        weather.pm25 = Some(pm25);
+    }
+    Ok(weather)
+}
+
 /// US AQI + PM2.5 (separate Open-Meteo endpoint, also keyless). `None` on any failure.
 pub fn air_quality(latitude: f64, longitude: f64) -> Option<(i64, f64)> {
     let body = ureq::get("https://air-quality-api.open-meteo.com/v1/air-quality")
@@ -158,7 +187,7 @@ pub fn parse_air_quality(data: &[u8]) -> Result<(i64, f64), String> {
 /// US AQI band → (hex colour, Indonesian label).
 pub fn air_quality_band(aqi: i64) -> (&'static str, &'static str) {
     match aqi {
-        ..50 => ("#34C759", "Baik"),
+        ..=50 => ("#34C759", "Baik"),
         51..=100 => ("#FFCC00", "Sedang"),
         101..=150 => ("#FF9500", "Tidak Sehat (Sensitif)"),
         151..=200 => ("#FF3B30", "Tidak Sehat"),

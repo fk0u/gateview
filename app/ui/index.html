@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GateView</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="scrim"></div>
+  <main id="dashboard">
+    <section class="left">
+      <div id="greeting" class="greeting"></div>
+      <div id="clock-row" data-hit="clock">
+        <span id="clock">--:--</span><span id="seconds"></span>
+      </div>
+      <div id="date-line"></div>
+      <div class="chips">
+        <div id="weather-chip" data-hit="weather" class="chip hidden">
+          <span id="weather-icon">☁</span><span id="weather-temp"></span><span id="weather-label"></span>
+        </div>
+        <div id="stats-chip" data-hit="stats" class="chip hidden">
+          <span>CPU <b id="cpu"></b></span><span>RAM <b id="ram"></b></span>
+        </div>
+      </div>
+    </section>
+    <aside id="panel" class="panel glass" hidden></aside>
+  </main>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

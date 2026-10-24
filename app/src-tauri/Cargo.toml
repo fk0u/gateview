@@ -1,0 +1,21 @@
+[package]
+name = "gateview"
+description = "GateView Windows/Linux shell (Tauri 2) — the ambient desktop dashboard."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+notify = "7"
+rodio = "0.19"
+window-vibrancy = "0.5"
+gateview-core = { path = "../../crates/gateview-core" }
+gateview-providers = { path = "../../crates/gateview-providers" }

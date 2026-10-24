@@ -1,0 +1,136 @@
+/* GateView Windows/Linux shell — dark glass over the wallpaper/acrylic. */
+:root {
+  --accent: #ffc56b;
+  --glass: rgba(12, 16, 28, 0.35);
+  --text: #f4f6fb;
+  --dim: rgba(244, 246, 251, 0.6);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: transparent; /* the wallpaper shows through the transparent window */
+  color: var(--text);
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+#scrim {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.5));
+  pointer-events: none;
+}
+
+#dashboard {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 72px 56px;
+}
+
+.left { display: flex; flex-direction: column; gap: 12px; }
+
+.greeting { font-size: 26px; font-weight: 500; opacity: 0.85; }
+
+#clock-row { display: flex; align-items: baseline; gap: 10px; }
+#clock {
+  font-size: clamp(80px, 12vw, 190px);
+  font-weight: 200;
+  letter-spacing: -4px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+#seconds { font-size: 34px; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+#date-line { font-size: 24px; opacity: 0.85; }
+
+.chips { display: flex; gap: 12px; }
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 14px;
+}
+.chip b { font-variant-numeric: tabular-nums; }
+.hidden { display: none; }
+
+.panel {
+  width: 380px;
+  max-height: 72vh;
+  overflow-y: auto;
+  padding: 24px;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.glass {
+  background: var(--glass);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(24px) saturate(1.2);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.widget { display: flex; flex-direction: column; gap: 10px; }
+.widget h3 {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.7;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.divider { height: 1px; background: rgba(255, 255, 255, 0.15); }
+
+.row { display: flex; justify-content: space-between; align-items: baseline; }
+.prayer-name { font-size: 20px; font-weight: 600; }
+.prayer-time { font-size: 26px; font-weight: 300; color: var(--accent); font-variant-numeric: tabular-nums; }
+.small-grid { display: flex; justify-content: space-between; font-size: 12px; opacity: 0.75; }
+.small-grid span { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.next-in { font-size: 13px; opacity: 0.6; }
+
+.count-big { display: flex; align-items: baseline; gap: 14px; }
+.count-days { font-size: 46px; font-weight: 300; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.np-title { font-size: 17px; font-weight: 600; }
+.np-artist { font-size: 13px; opacity: 0.7; }
+.np-bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.15); }
+.np-fill { height: 100%; border-radius: 2px; background: var(--accent); }
+.np-times { display: flex; justify-content: space-between; font-size: 11px; opacity: 0.6; font-variant-numeric: tabular-nums; }
+
+.reminder-row { display: flex; gap: 10px; align-items: center; font-size: 14px; }
+.reminder-row .circle {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  flex: none;
+}
+.reminder-row.done .circle { background: var(--accent); border-color: var(--accent); }
+.reminder-row.done .title { text-decoration: line-through; opacity: 0.5; }
+
+.notes-text {
+  font-size: 14px;
+  white-space: pre-wrap;
+  opacity: 0.9;
+  min-height: 40px;
+}
+.notes-edit {
+  width: 100%;
+  min-height: 180px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 8px;
+  font: inherit;
+  resize: vertical;
+}

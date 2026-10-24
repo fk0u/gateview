@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/gateview-core"]
+members = ["crates/gateview-core", "crates/gateview-providers", "app/src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

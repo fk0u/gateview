@@ -1,8 +1,18 @@
 # GateView on Windows & Linux — Rust Architecture
 
-Status: **M0 done** (October 2026) — `crates/gateview-core` exists and passes 26 tests, including a **golden dataset printed by the Swift app itself** (`Tests/golden.swift` → `crates/gateview-core/tests/golden.rs`): prayer times to the minute, iqamah offsets, countdown format, Hijri dates and theme.json decoding are verified identical. One finding: ICU4X's bundled Umm-al-Qura computation drifts a day from Apple's calendar on some month boundaries, so the exact month-start table (AH 1441–1472) is exported from Swift into `Tests/fixtures/umm-alqura-months.json` and consumed by Rust (ICU remains the fallback outside that range).
+Status: **M0 ✅ + M1 code-complete** (October 2026). M0: `crates/gateview-core` passes 26 tests including a **golden dataset printed by the Swift app itself** (`Tests/golden.swift` → `crates/gateview-core/tests/golden.rs`): prayer times to the minute, iqamah offsets, countdown format, Hijri dates and theme.json decoding are verified identical. One finding: ICU4X's bundled Umm-al-Qura computation drifts a day from Apple's calendar on some month boundaries, so the exact month-start table (AH 1441–1472) is exported from Swift into `Tests/fixtures/umm-alqura-months.json` and consumed by Rust (ICU remains the fallback outside that range).
 
-macOS GateView (Swift/SwiftUI, shipped as v2.3) stays as-is; this document covers the second front: **Windows + Linux (.deb)**, where the headline feature is a **macOS-style Dock that replaces the taskbar / native dock**, plus a **macOS-style menu bar**.
+M1: the Tauri 2 Windows shell is written and type-checked (`app/src-tauri` + `app/ui`, with `crates/gateview-providers` providing SMTC Now Playing, sysinfo stats and Win32 helpers). `cargo check` passes on macOS and for the `x86_64-pc-windows-msvc` target; **the actual .msi build must run on Windows** (tauri-winres needs the Windows resource toolchain):
+
+```powershell
+# on Windows: Rust (MSVC) + Visual Studio Build Tools + WebView2 (preinstalled on Win11)
+cd app/src-tauri
+cargo build --release              # runs the app
+cargo install tauri-cli --version "^2"
+cargo tauri build                  # → .msi + .deb installers
+```
+
+macOS GateView (Swift/SwiftUI, shipped as v2.3) stays as-is.
 
 ---
 
