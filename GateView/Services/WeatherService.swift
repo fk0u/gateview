@@ -13,12 +13,23 @@ struct Weather: Equatable {
     let wind: Int        // km/h
     let hourly: [Hour]   // next 12 h
     let daily: [Day]     // next 5 days
+    var aqi: Int? = nil  // US AQI, from the air-quality endpoint (nil when it failed)
+    var pm25: Double? = nil
 }
 
 @MainActor
 final class WeatherService {
     /// One request every 30 min covers the inline widget and the detail card.
     func fetch(latitude: Double, longitude: Double, unit: String) async throws -> Weather {
+        var weather = try await Self.forecast(latitude: latitude, longitude: longitude, unit: unit)
+        if let air = await Self.airQuality(latitude: latitude, longitude: longitude) {
+            weather.aqi = air.aqi
+            weather.pm25 = air.pm25
+        }
+        return weather
+    }
+
+    private nonisolated static func forecast(latitude: Double, longitude: Double, unit: String) async throws -> Weather {
         // Open-Meteo: free, no API key.
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         components.queryItems = [
@@ -80,18 +91,54 @@ final class WeatherService {
                        wind: Int(c.wind_speed_10m.rounded()), hourly: Array(hours.prefix(12)), daily: Array(days.prefix(5)))
     }
 
-    /// WMO weather code → SF Symbol + short Indonesian label.
-    nonisolated static func describe(code: Int, isDay: Bool) -> (String, String) {
+    /// US AQI + PM2.5 (separate Open-Meteo endpoint, also keyless). nil on any failure.
+    nonisolated static func airQuality(latitude: Double, longitude: Double) async -> (aqi: Int, pm25: Double)? {
+        var components = URLComponents(string: "https://air-quality-api.open-meteo.com/v1/air-quality")!
+        components.queryItems = [
+            URLQueryItem(name: "latitude", value: String(latitude)),
+            URLQueryItem(name: "longitude", value: String(longitude)),
+            URLQueryItem(name: "current", value: "us_aqi,pm2_5"),
+            URLQueryItem(name: "timezone", value: "auto"),
+        ]
+        guard let (data, response) = try? await URLSession.shared.data(from: components.url!),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return try? parseAirQuality(data)
+    }
+
+    nonisolated static func parseAirQuality(_ data: Data) throws -> (aqi: Int, pm25: Double) {
+        struct Response: Decodable {
+            struct Current: Decodable { let us_aqi: Int; let pm2_5: Double }
+            let current: Current
+        }
+        let r = try JSONDecoder().decode(Response.self, from: data)
+        return (r.current.us_aqi, r.current.pm2_5)
+    }
+
+    /// US AQI band → SF Symbol colour + Indonesian/English label.
+    nonisolated static func airQualityBand(_ aqi: Int) -> (String, String) {
+        switch aqi {
+        case ..<51: return ("#34C759", "Baik")
+        case ..<101: return ("#FFCC00", "Sedang")
+        case ..<151: return ("#FF9500", "Tidak Sehat (Sensitif)")
+        case ..<201: return ("#FF3B30", "Tidak Sehat")
+        case ..<301: return ("#AF52DE", "Sangat Tidak Sehat")
+        default: return ("#8E3B3B", "Berbahaya")
+        }
+    }
+
+    /// WMO weather code → SF Symbol + short label (Indonesian by default).
+    nonisolated static func describe(code: Int, isDay: Bool, lang: String = "id") -> (String, String) {
         switch code {
-        case 0: return (isDay ? "sun.max.fill" : "moon.stars.fill", "Cerah")
-        case 1, 2: return (isDay ? "cloud.sun.fill" : "cloud.moon.fill", "Cerah Berawan")
-        case 3: return ("cloud.fill", "Berawan")
-        case 45, 48: return ("cloud.fog.fill", "Berkabut")
-        case 51...57: return ("cloud.drizzle.fill", "Gerimis")
-        case 61...67, 80...82: return ("cloud.rain.fill", "Hujan")
-        case 71...77, 85, 86: return ("cloud.snow.fill", "Salju")
-        case 95...99: return ("cloud.bolt.rain.fill", "Badai Petir")
-        default: return ("cloud.fill", "Berawan")
+        case 0: return (isDay ? "sun.max.fill" : "moon.stars.fill", L10n.tr(lang, "Cerah", isDay ? "Clear" : "Clear Night"))
+        case 1, 2: return (isDay ? "cloud.sun.fill" : "cloud.moon.fill", L10n.tr(lang, "Cerah Berawan", "Partly Cloudy"))
+        case 3: return ("cloud.fill", L10n.tr(lang, "Berawan", "Cloudy"))
+        case 45, 48: return ("cloud.fog.fill", L10n.tr(lang, "Berkabut", "Foggy"))
+        case 51...57: return ("cloud.drizzle.fill", L10n.tr(lang, "Gerimis", "Drizzle"))
+        case 61...67, 80...82: return ("cloud.rain.fill", L10n.tr(lang, "Hujan", "Rain"))
+        case 71...77, 85, 86: return ("cloud.snow.fill", L10n.tr(lang, "Salju", "Snow"))
+        case 95...99: return ("cloud.bolt.rain.fill", L10n.tr(lang, "Badai Petir", "Thunderstorm"))
+        default: return ("cloud.fill", L10n.tr(lang, "Berawan", "Cloudy"))
         }
     }
 

@@ -1,5 +1,6 @@
 import ServiceManagement
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Full settings app: sidebar + sections, all bound to the live theme (changes apply instantly).
 struct SettingsView: View {
@@ -70,6 +71,14 @@ private struct GeneralSection: View {
             Text("Hover a widget to highlight it, click to open details. Everything else stays click-through.")
                 .font(.caption).foregroundStyle(.secondary)
             Toggle("Click-through everywhere", isOn: $windows.clickThrough)
+            Toggle("Hide on fullscreen apps", isOn: $store.theme.autoHideFullscreen)
+            Text("The dashboard fades out while a fullscreen app is in front (presentations, games), and comes back when you return to the desktop.")
+                .font(.caption).foregroundStyle(.secondary)
+            Picker("Language", selection: $store.theme.language) {
+                Text("Auto (follow system)").tag("auto")
+                Text("Indonesia").tag("id")
+                Text("English").tag("en")
+            }
         }
         SwiftUI.Section("Display") {
             Picker("Show on", selection: $store.theme.displayIndex) {
@@ -232,6 +241,31 @@ private struct WidgetsSection: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
 
+        if store.theme.panelWidgets.contains("countdown") {
+            SwiftUI.Section("Countdown") {
+                if store.theme.countdowns.isEmpty {
+                    Text("Count down to any date — a wedding, a deadline, Lebaran.").font(.caption).foregroundStyle(.secondary)
+                }
+                ForEach($store.theme.countdowns) { $entry in
+                    HStack {
+                        TextField("Title", text: $entry.title)
+                        DatePicker("", selection: Binding(
+                            get: { entry.target ?? .now },
+                            set: { entry.date = Self.dayFormatter.string(from: $0) }
+                        ), displayedComponents: .date)
+                        .labelsHidden()
+                        Button {
+                            store.theme.countdowns.removeAll { $0.id == entry.id }
+                        } label: {
+                            Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                Button("Add countdown") { store.theme.countdowns.append(Countdown()) }
+            }
+        }
+
         if store.theme.panelWidgets.contains("gallery") {
             SwiftUI.Section {
                 LabeledContent("Folder") {
@@ -250,6 +284,13 @@ private struct WidgetsSection: View {
             }
         }
     }
+
+    private static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 
     private func chooseFolder() {
         let panel = NSOpenPanel()
@@ -340,6 +381,22 @@ private struct PrayerSection: View {
                 }
                 Button { ReminderService.play(store.theme.reminderSound) } label: { Image(systemName: "speaker.wave.2.fill") }
             }
+            LabeledContent("Adhan sound") {
+                if store.theme.adhanPath.isEmpty {
+                    Text("Chime only").foregroundStyle(.secondary)
+                } else {
+                    Text((store.theme.adhanPath as NSString).lastPathComponent).lineLimit(1).truncationMode(.middle).foregroundStyle(.secondary)
+                    Button { ReminderService.playAdhan(ReminderService.adhanPath(for: store.theme.adhanPath) ?? "", volume: store.theme.adhanVolume) } label: {
+                        Image(systemName: "speaker.wave.2.fill")
+                    }
+                    .disabled(ReminderService.adhanPath(for: store.theme.adhanPath) == nil)
+                    Button {
+                        store.theme.adhanPath = ""
+                    } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                }
+                Button("Choose…", action: chooseAdhan)
+            }
+            .help("Plays this audio file at every adzan instead of the chime. Set per-prayer files in theme.json with \"adhanPaths\".")
             Button("Send test reminder", action: testReminder)
         }
     }
@@ -351,6 +408,14 @@ private struct PrayerSection: View {
             results = (try? await WeatherService.search(query)) ?? []
             searching = false
         }
+    }
+
+    private func chooseAdhan() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio]
+        panel.canChooseFiles = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        store.theme.adhanPath = (url.path as NSString).abbreviatingWithTildeInPath
     }
 }
 
@@ -398,6 +463,7 @@ private struct FileSection: View {
 }
 
 private struct AboutSection: View {
+    @ObservedObject private var updates = UpdateService.shared
     @State private var update: String?
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
 
@@ -412,22 +478,15 @@ private struct AboutSection: View {
             }
             Link("github.com/fk0u/gateview", destination: URL(string: "https://github.com/fk0u/gateview")!)
             HStack {
-                Button("Check for Updates", action: check)
+                Button("Check for Updates") {
+                    update = "Checking…"
+                    Task { update = await updates.check() }
+                }
+                if updates.isAvailable {
+                    Button("Get \(updates.latest ?? "")…") { NSWorkspace.shared.open(UpdateService.releasesURL) }
+                }
                 if let update { Text(update).foregroundStyle(.secondary) }
             }
-        }
-    }
-
-    private func check() {
-        update = "Checking…"
-        Task {
-            struct Release: Decodable { let tag_name: String }
-            let url = URL(string: "https://api.github.com/repos/fk0u/gateview/releases/latest")!
-            guard let (data, _) = try? await URLSession.shared.data(from: url),
-                  let latest = try? JSONDecoder().decode(Release.self, from: data).tag_name.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
-            else { update = "No releases found"; return }
-            update = latest.compare(version, options: .numeric) == .orderedDescending
-                ? "Version \(latest) is available on GitHub" : "You're up to date"
         }
     }
 }

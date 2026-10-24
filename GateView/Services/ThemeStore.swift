@@ -34,10 +34,20 @@ struct Theme: Codable, Equatable {
     var reminderSound = "Glass"
     var reminders = ["Fajr": true, "Dhuhr": true, "Asr": true, "Maghrib": true, "Isha": true]
     var temperatureUnit = "celsius" // celsius | fahrenheit
+    var adhanPath = ""            // audio file played at every adzan (chime mode); per-prayer override below
+    var adhanPaths: [String: String] = [:] // e.g. {"Fajr": "~/azan-subuh.mp3"}
+    var adhanVolume = 0.9         // 0…1
+
+    // Behaviour
+    var language = "auto"         // auto | id | en
+    var autoHideFullscreen = true // fade the dashboard away while a fullscreen app is in front
 
     // Gallery (experimental)
     var galleryFolder = "~/Pictures"
     var galleryInterval = 30.0    // seconds per photo
+
+    // Countdown widget
+    var countdowns: [Countdown] = []
 
     // Location (prayer times + weather)
     var city = "Samarinda"
@@ -77,6 +87,8 @@ struct Theme: Codable, Equatable {
         ("nowPlaying", "Now Playing", "music.note", false),
         ("calendar", "Calendar", "calendar", false),
         ("notes", "Notes", "note.text", false),
+        ("reminders", "Reminders", "checklist", false),
+        ("countdown", "Countdown", "timer", false),
         ("gallery", "Gallery", "photo.on.rectangle", true),
     ]
 
@@ -87,6 +99,12 @@ struct Theme: Codable, Equatable {
     }
 
     var locationKey: String { "\(city)|\(country)|\(latitude)|\(longitude)|\(prayerMethod)|\(iqamah.sorted { $0.key < $1.key })" }
+
+    /// Resolved UI language: "id" or "en" ("auto" follows the system locale).
+    var displayLanguage: String {
+        if language == "id" || language == "en" { return language }
+        return Locale.current.language.languageCode?.identifier == "id" ? "id" : "en"
+    }
 
     var accentColor: Color { Color(hex: accent) ?? .orange }
     var fontDesign: Font.Design {
@@ -119,6 +137,8 @@ final class ThemeStore: ObservableObject {
         didSet { if theme != oldValue { save() } }
     }
     @Published private(set) var loadError: String?
+    /// Accessibility → Reduce Transparency: glass becomes a solid scrim (no behind-window blur).
+    @Published private(set) var reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
 
     private var watcher: DispatchSourceFileSystemObject?
 
@@ -126,6 +146,12 @@ final class ThemeStore: ObservableObject {
         theme = (try? Data(contentsOf: Self.url)).flatMap { try? Theme.decode($0) } ?? Theme()
         if !FileManager.default.fileExists(atPath: Self.url.path) { save() }
         watch()
+        NotificationCenter.default.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                                               object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+            }
+        }
     }
 
     func reset() { theme = Theme() }

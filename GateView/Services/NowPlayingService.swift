@@ -21,12 +21,21 @@ struct NowPlaying: Equatable {
 }
 
 /// Reads and controls the system "Now Playing" via the private MediaRemote framework (event-driven, no polling).
-/// ponytail: private API; on macOS 15.4+ Apple limits it to its own apps, so `track` just stays nil there.
+/// ponytail: private API; on macOS 15.4+ Apple limits it to its own apps, so there we poll
+/// Spotify and Music via AppleScript instead (AppleScriptNowPlaying).
 @MainActor
 final class NowPlayingService: ObservableObject {
     @Published private(set) var track: NowPlaying?
 
     enum Command: UInt32 { case toggle = 2, next = 4, previous = 5 }
+
+    /// True on macOS 15.4+/26+, where MediaRemote no longer answers.
+    static var needsAppleScript: Bool {
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        return v.majorVersion > 15 || (v.majorVersion == 15 && v.minorVersion >= 4)
+    }
+
+    private var fallback: AppleScriptNowPlaying?
 
     private typealias GetInfo = @convention(c) (DispatchQueue, @escaping @convention(block) (NSDictionary?) -> Void) -> Void
     private typealias IsPlaying = @convention(c) (DispatchQueue, @escaping @convention(block) (Bool) -> Void) -> Void
@@ -43,6 +52,14 @@ final class NowPlayingService: ObservableObject {
     private var observers: [NSObjectProtocol] = []
 
     func start() {
+        if Self.needsAppleScript {
+            guard fallback == nil else { return }
+            let source = AppleScriptNowPlaying()
+            source.onUpdate = { [weak self] in self?.setTrack($0) }
+            fallback = source
+            source.start()
+            return
+        }
         guard getInfo == nil,
               let handle = dlopen("/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote", RTLD_LAZY),
               let infoSym = dlsym(handle, "MRMediaRemoteGetNowPlayingInfo"),
@@ -67,17 +84,29 @@ final class NowPlayingService: ObservableObject {
     }
 
     func stop() {
+        fallback?.stop()
+        fallback = nil
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
         getInfo = nil
         track = nil
     }
 
+    private func setTrack(_ next: NowPlaying?) {
+        // Animate here: the slide in/out of the widget follows this change.
+        let animate = ThemeStore.shared.theme.motion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        // Animate only appear/disappear/song change; timing-only updates stay instant.
+        let structural = next?.title != track?.title || next?.isPlaying != track?.isPlaying
+        withAnimation(animate && structural ? .spring(response: 0.5, dampingFraction: 0.85) : nil) { track = next }
+    }
+
     func perform(_ command: Command) {
+        if let fallback { fallback.perform(command); return }
         _ = send?(command.rawValue, nil)
     }
 
     func seek(to seconds: Double) {
+        if let fallback { fallback.seek(to: seconds); return }
         setElapsed?(seconds)
         if let t = track { track = NowPlaying(title: t.title, artist: t.artist, album: t.album, artwork: t.artwork, isPlaying: t.isPlaying,
                                               duration: t.duration, elapsed: seconds, timestamp: Date(), rate: t.rate) }
@@ -85,12 +114,14 @@ final class NowPlayingService: ObservableObject {
 
     /// Brings the player (Spotify, Music, browser…) to the front.
     func openSource() {
+        if let fallback { fallback.openSource(); return }
         getPID?(.main) { pid in
             NSRunningApplication(processIdentifier: pid)?.activate(options: [])
         }
     }
 
     private func refresh() {
+        guard fallback == nil else { return }
         isPlaying?(.main) { [weak self] playing in
             guard let self else { return }
             self.getInfo?(.main) { info in
@@ -119,7 +150,7 @@ final class NowPlayingService: ObservableObject {
     }
 
     /// Downsample artwork so a 3000px cover doesn't cost megabytes of RAM.
-    private nonisolated static func thumbnail(_ data: Data) -> NSImage? {
+    nonisolated static func thumbnail(_ data: Data) -> NSImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                   kCGImageSourceCreateThumbnailFromImageAlways: true,

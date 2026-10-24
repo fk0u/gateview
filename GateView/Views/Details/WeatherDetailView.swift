@@ -3,6 +3,7 @@ import SwiftUI
 struct WeatherDetailView: View {
     let weather: Weather
     let city: String
+    var lang: String = "id"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -20,6 +21,9 @@ struct WeatherDetailView: View {
                     Label("\(weather.wind) km/j", systemImage: "wind")
                 }
                 .font(.caption).opacity(0.75)
+            }
+            if let aqi = weather.aqi {
+                airQuality(aqi)
             }
 
             HStack(spacing: 0) {
@@ -49,6 +53,21 @@ struct WeatherDetailView: View {
                 }
                 .font(.callout.monospacedDigit())
             }
+        }
+    }
+    private func airQuality(_ aqi: Int) -> some View {
+        let (hex, idLabel) = WeatherService.airQualityBand(aqi)
+        let en = ["Baik": "Good", "Sedang": "Moderate", "Tidak Sehat (Sensitif)": "Unhealthy (Sensitive)",
+                  "Tidak Sehat": "Unhealthy", "Sangat Tidak Sehat": "Very Unhealthy", "Berbahaya": "Hazardous"][idLabel] ?? idLabel
+        return HStack(spacing: 8) {
+            Circle().fill(Color(hex: hex) ?? .green).frame(width: 8, height: 8)
+            Text(L10n.tr(lang, idLabel, en)).font(.caption.weight(.medium))
+            Text("US AQI \(aqi)").font(.caption.monospacedDigit()).opacity(0.6)
+            if let pm = weather.pm25 {
+                Text("PM2.5 \(Int(pm.rounded()))").font(.caption.monospacedDigit()).opacity(0.6)
+            }
+            Spacer()
+            Text(L10n.tr(lang, "Kualitas udara", "Air quality")).font(.caption2).opacity(0.45)
         }
     }
 }

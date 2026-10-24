@@ -13,9 +13,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.2.1</string>
+	<string>2.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>7</string>
+	<string>8</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSUIElement</key>
@@ -24,5 +24,9 @@
 	<string>GateView shows your next events on the desktop.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>GateView shows your next events on the desktop.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>GateView shows and checks off your reminders on the desktop.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>GateView shows and checks off your reminders on the desktop.</string>
 </dict>
 </plist>

@@ -19,6 +19,7 @@ final class DashboardViewModel: ObservableObject {
 
     let nowPlaying = NowPlayingService()
     let reminders = ReminderService()
+    let remindersService = RemindersService()
     let stats = SystemStatsMonitor()
     let gallery = GalleryService()
     private lazy var wallpaper = WallpaperColorService { [weak self] color in
@@ -43,6 +44,10 @@ final class DashboardViewModel: ObservableObject {
                 guard let self else { return }
                 Task { @MainActor in self.loadEvents() }
             },
+            center.addObserver(forName: .EKEventStoreChanged, object: remindersService.store, queue: .main) { [weak self] _ in
+                guard let self else { return }
+                Task { @MainActor in self.remindersService.load() }
+            },
         ]
         Task { await refresh() }
         // Debug: `GateView -GateViewPreviewEffect 63` forces a weather effect (used to measure CPU).
@@ -52,7 +57,7 @@ final class DashboardViewModel: ObservableObject {
         store.$theme.map(\.locationKey).removeDuplicates().dropFirst()
             .sink { [weak self] _ in Task { await self?.refresh(force: true) } }
             .store(in: &subscriptions)
-        store.$theme.map { "\($0.reminderMode)|\($0.reminderSound)|\($0.reminders.sorted { $0.key < $1.key })" }
+        store.$theme.map { "\($0.reminderMode)|\($0.reminderSound)|\($0.adhanPath)|\($0.adhanPaths.sorted { $0.key < $1.key })|\($0.adhanVolume)|\($0.reminders.sorted { $0.key < $1.key })" }
             .removeDuplicates().dropFirst()
             .sink { [weak self] _ in Task { await self?.rescheduleReminders() } }
             .store(in: &subscriptions)
@@ -88,6 +93,15 @@ final class DashboardViewModel: ObservableObject {
         store.$theme.map { $0.panelWidgets.contains("nowPlaying") }.removeDuplicates()
             .sink { [weak self] on in on ? self?.nowPlaying.start() : self?.nowPlaying.stop() }
             .store(in: &subscriptions)
+        store.$theme.map { $0.panelWidgets.contains("reminders") }.removeDuplicates()
+            .sink { [weak self] on in Task { @MainActor in
+                guard let self else { return }
+                if on {
+                    if !self.remindersService.authorized { _ = await self.remindersService.requestAccess() }
+                    self.remindersService.load()
+                }
+            } }
+            .store(in: &subscriptions)
         Task { [weak self] in
             while !Task.isCancelled {
                 await self?.loadWeather()
@@ -102,6 +116,11 @@ final class DashboardViewModel: ObservableObject {
             calendarAuthorized = await calendarService.requestAccess()
         }
         loadEvents()
+        // Only ask for Reminders access when the widget is actually in the panel.
+        if store.theme.panelWidgets.contains("reminders") {
+            if !remindersService.authorized { _ = await remindersService.requestAccess() }
+            remindersService.load()
+        }
         if force { await loadWeather() }
     }
 

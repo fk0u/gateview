@@ -29,7 +29,7 @@ extension ClockWidgetView {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 18) {
-                    Text(Self.greeting(for: context.date, name: theme.greetingName))
+                    Text(Self.greeting(for: context.date, name: theme.greetingName, lang: theme.displayLanguage))
                         .font(.system(size: 26, weight: .medium))
                         .opacity(0.85)
                     accessory
@@ -56,12 +56,7 @@ extension ClockWidgetView {
         }
     }
 
-    static func greeting(for date: Date, name: String) -> String {
-        let suffix = name.isEmpty ? "" : ", \(name)"
-        switch Calendar.current.component(.hour, from: date) {
-        case 4..<12: return "Good Morning" + suffix
-        case 12..<18: return "Good Afternoon" + suffix
-        default: return "Good Evening" + suffix
-        }
+    static func greeting(for date: Date, name: String, lang: String = "id") -> String {
+        L10n.greeting(for: date, name: name, lang: lang)
     }
 }

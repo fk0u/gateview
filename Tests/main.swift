@@ -1,4 +1,4 @@
-// Run: swiftc GateView/Models/*.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore,MoodEngine,WallpaperColorService,NowPlayingService,GalleryService}.swift Tests/main.swift -o /tmp/gv-check && /tmp/gv-check
+// Run: swiftc GateView/Models/*.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore,MoodEngine,WallpaperColorService,NowPlayingService,AppleScriptNowPlaying,RemindersService,GalleryService,L10n}.swift Tests/main.swift -o /tmp/gv-check && /tmp/gv-check
 import Foundation
 import SwiftUI
 
@@ -96,4 +96,71 @@ try! FileManager.default.createDirectory(at: dir, withIntermediateDirectories: t
 for name in ["a.jpg", "b.PNG", "c.txt", ".hidden.jpg"] { FileManager.default.createFile(atPath: dir.appendingPathComponent(name).path, contents: Data()) }
 assert(Set(GalleryService.images(in: dir).map(\.lastPathComponent)) == ["a.jpg", "b.PNG"])
 try? FileManager.default.removeItem(at: dir)
+
+// Countdown: date parsing, whole-day difference, upcoming sort, theme decode
+assert(Countdown.days(until: at(0, 0, friday), from: at(23, 0, thursday)) == 1)
+assert(Countdown.days(until: at(23, 0, friday), from: at(8, 0, friday)) == 0)
+let c1 = Countdown(title: "Lebaran", date: "2027-03-10"), c2 = Countdown(title: "Trip", date: "2026-10-25"), bad = Countdown(title: "x", date: "oops")
+assert(c1.target != nil && bad.target == nil)
+assert(CountdownService.upcoming([c1, c2, bad], from: friday).map(\.title) == ["Trip", "Lebaran"])
+assert(CountdownService.upcoming([Countdown(title: "old", date: "2020-01-01")], from: friday).isEmpty)
+let cdTheme = try! Theme.decode(Data(##"{"countdowns":[{"title":"Lebaran","date":"2027-03-10","symbol":"moon.stars"}]}"##.utf8))
+assert(cdTheme.countdowns.count == 1 && cdTheme.countdowns[0].symbol == "moon.stars")
+// New 2.3 defaults
+assert(cdTheme.autoHideFullscreen && cdTheme.language == "auto" && cdTheme.displayLanguage != "" && cdTheme.adhanVolume == 0.9)
+// uid churn doesn't affect equality (ThemeStore would otherwise rewrite theme.json forever)
+assert(Countdown(title: "a", date: "2027-03-10") == Countdown(title: "a", date: "2027-03-10"))
+
+// Air quality parsing + banding
+let aqData = Data(##"{"current":{"us_aqi":78,"pm2_5":25.4}}"##.utf8)
+let aq = try! WeatherService.parseAirQuality(aqData)
+assert(aq.aqi == 78 && aq.pm25 == 25.4)
+assert(WeatherService.airQualityBand(42).1 == "Baik" && WeatherService.airQualityBand(190).1 == "Tidak Sehat")
+
+// Localization: greetings and weather labels in both languages
+assert(L10n.greeting(for: at(9, 0, friday), name: "", lang: "id") == "Selamat Pagi")
+assert(L10n.greeting(for: at(13, 0, friday), name: "Ghani", lang: "id") == "Selamat Siang, Ghani")
+assert(L10n.greeting(for: at(20, 0, friday), name: "", lang: "en") == "Good Evening")
+assert(L10n.daysLeft(0, lang: "id") == "Hari ini!" && L10n.daysLeft(3, lang: "en") == "3 days left")
+assert(WeatherService.describe(code: 63, isDay: true, lang: "en").1 == "Rain")
+assert(WeatherService.describe(code: 0, isDay: false).1 == "Cerah") // default stays Indonesian
+var langTheme = Theme()
+assert(langTheme.displayLanguage == langTheme.displayLanguage) // auto resolves deterministically
+langTheme.language = "id"; assert(langTheme.displayLanguage == "id")
+
+// Adhan: per-prayer file wins over the global one; missing files are ignored
+var adhanTheme = Theme()
+let adzanDir = FileManager.default.temporaryDirectory.appendingPathComponent("gv-adzan-\(UUID().uuidString)")
+try! FileManager.default.createDirectory(at: adzanDir, withIntermediateDirectories: true)
+FileManager.default.createFile(atPath: adzanDir.appendingPathComponent("azan.mp3").path, contents: Data())
+FileManager.default.createFile(atPath: adzanDir.appendingPathComponent("subuh.mp3").path, contents: Data())
+adhanTheme.adhanPath = adzanDir.appendingPathComponent("azan.mp3").path
+adhanTheme.adhanPaths = ["Fajr": adzanDir.appendingPathComponent("subuh.mp3").path, "Asr": adzanDir.appendingPathComponent("missing.mp3").path]
+assert(ReminderService.adhanPath(for: "Maghrib", in: adhanTheme)?.hasSuffix("/azan.mp3") == true)
+assert(ReminderService.adhanPath(for: "Fajr", in: adhanTheme)?.hasSuffix("/subuh.mp3") == true)
+assert(ReminderService.adhanPath(for: "Asr", in: adhanTheme) == nil) // file missing → chime fallback
+assert(ReminderService.adhanPath(for: "") == nil) // empty path → chime fallback
+assert(Set(ReminderService.adhanPaths(in: adhanTheme).keys) == ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"])
+try? FileManager.default.removeItem(at: adzanDir)
+
+// AppleScript Now Playing: field parsing (Spotify ms → s), playing wins over paused
+let line = ["Spotify", "true", "Song A", "Artist", "Album", "210000", "35.5", "https://x/y.jpg"].joined(separator: "\u{1F}")
+assert(AppleScriptNowPlaying.parseLine(line)!.duration == 210)
+let paused = ["Music", "false", "Song B", "", "", "95", "12", ""].joined(separator: "\u{1F}")
+let both = AppleScriptNowPlaying.pick(line + "\n" + paused)!
+assert(both.app == "Spotify" && both.playing && both.artworkURL == "https://x/y.jpg")
+assert(AppleScriptNowPlaying.pick(paused)!.duration == 95) // Music already reports seconds
+assert(AppleScriptNowPlaying.pick("garbage") == nil)
+assert(AppleScriptNowPlaying.parseLine(["Spotify", "true", "", "", "", "0", "0", ""].joined(separator: "\u{1F}")) == nil)
+
+// Reminders widget selection: open ones first by due date, capped
+let rItems = [
+    RemindersService.Item(id: "1", title: "undated", due: nil, completed: false),
+    RemindersService.Item(id: "2", title: "later", due: at(20, 0, friday), completed: false),
+    RemindersService.Item(id: "3", title: "sooner", due: at(10, 0, friday), completed: false),
+    RemindersService.Item(id: "4", title: "done", due: at(9, 0, friday), completed: true),
+]
+assert(RemindersService.select(rItems).map(\.title) == ["sooner", "later", "undated"])
+assert(RemindersService.select(rItems, limit: 2).count == 2)
+
 print("ok", PrayerTimeService.hijri(friday))

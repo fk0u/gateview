@@ -1,13 +1,16 @@
 import AppKit
+import AVFoundation
 import UserNotifications
 
-/// Banner at each adzan (scheduled with the OS, no polling) + optional soft chime. Settings live in the theme.
+/// Banner at each adzan (scheduled with the OS, no polling) + optional chime or a real adhan audio file.
+/// Settings live in the theme.
 @MainActor
 final class ReminderService {
     static let modes = [("off", "Off"), ("banner", "Banner"), ("chime", "Banner + Chime")]
     static let sounds = ["Glass", "Tink", "Purr", "Pop", "Submarine", "Hero"]
 
     private var chimeTask: Task<Void, Never>?
+    private static var adhanPlayer: AVAudioPlayer?
 
     func schedule(_ prayers: [Prayer], theme: Theme, now: Date = .now) async {
         let center = UNUserNotificationCenter.current()
@@ -30,12 +33,19 @@ final class ReminderService {
 
         guard theme.reminderMode == "chime" else { return }
         let sound = theme.reminderSound
+        let volume = theme.adhanVolume
         chimeTask = Task {
             for prayer in upcoming {
                 let wait = prayer.time.timeIntervalSinceNow
                 if wait > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000)) }
                 guard !Task.isCancelled else { return }
-                if Date().timeIntervalSince(prayer.time) < 60 { Self.play(sound) } // skip if the Mac slept through it
+                if Date().timeIntervalSince(prayer.time) < 60 { // skip if the Mac slept through it
+                    if let path = Self.adhanPath(for: prayer.key, in: theme) {
+                        Self.playAdhan(path, volume: volume)
+                    } else {
+                        Self.play(sound)
+                    }
+                }
             }
         }
     }
@@ -45,7 +55,13 @@ final class ReminderService {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { _, _ in
             UNUserNotificationCenter.current().add(request)
         }
-        if theme.reminderMode == "chime" { Self.play(theme.reminderSound) }
+        if theme.reminderMode == "chime" {
+            if let path = Self.adhanPaths(in: theme).values.first.flatMap({ Self.adhanPath(for: $0) }) {
+                Self.playAdhan(path, volume: theme.adhanVolume)
+            } else {
+                Self.play(theme.reminderSound)
+            }
+        }
     }
 
     nonisolated static func upcoming(_ prayers: [Prayer], after now: Date, enabled: [String: Bool] = [:]) -> [Prayer] {
@@ -54,6 +70,32 @@ final class ReminderService {
 
     static func play(_ sound: String) {
         NSSound(named: sound)?.play()
+    }
+
+    // MARK: Adhan audio
+
+    /// Per-prayer file if set, else the global one; `~` expanded. nil → fall back to the chime.
+    nonisolated static func adhanPath(for key: String, in theme: Theme) -> String? {
+        adhanPath(for: theme.adhanPaths[key] ?? theme.adhanPath)
+    }
+
+    nonisolated static func adhanPath(for raw: String) -> String? {
+        guard !raw.isEmpty else { return nil }
+        let expanded = (raw as NSString).expandingTildeInPath
+        return FileManager.default.fileExists(atPath: expanded) ? expanded : nil
+    }
+
+    nonisolated static func adhanPaths(in theme: Theme) -> [String: String] {
+        var all = theme.adhanPaths
+        if !theme.adhanPath.isEmpty { for key in ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"] where all[key] == nil { all[key] = theme.adhanPath } }
+        return all
+    }
+
+    static func playAdhan(_ path: String, volume: Double) {
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        adhanPlayer = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: path)) // kept alive until it finishes
+        adhanPlayer?.volume = Float(min(max(volume, 0), 1))
+        adhanPlayer?.play()
     }
 
     private static func content(for prayer: Prayer?) -> UNMutableNotificationContent {

@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             try? SMAppService.mainApp.register()
             UserDefaults.standard.set(true, forKey: key)
         }
+        UpdateService.shared.autoCheck()
     }
 
     func openSettings() {
@@ -65,12 +66,16 @@ private struct MenuContent: View {
     @ObservedObject var windows: WindowManager
     let viewModel: DashboardViewModel
     @ObservedObject var store: ThemeStore
+    @ObservedObject var updates = UpdateService.shared
     let openSettings: () -> Void
 
     var body: some View {
         Button("Settings…", action: openSettings)
             .keyboardShortcut(",")
         Divider()
+        if updates.isAvailable {
+            Button("Update \(updates.latest ?? "") tersedia…") { NSWorkspace.shared.open(UpdateService.releasesURL) }
+        }
         Toggle("Interactive Widgets", isOn: $store.theme.interactive)
         Toggle("Click-Through Everywhere", isOn: $windows.clickThrough)
             .keyboardShortcut("t")

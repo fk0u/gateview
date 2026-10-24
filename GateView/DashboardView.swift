@@ -62,6 +62,7 @@ struct DashboardView: View {
         .fontDesign(theme.fontDesign)
         .environment(\.colorScheme, .dark)
         .environment(\.gateMotion, motion)
+        .environment(\.gvReduceTransparency, store.reduceTransparency)
         .onAppear {
             withAnimation(motion ? .spring(response: 0.9, dampingFraction: 0.85).delay(0.2) : nil) { appeared = true }
         }
@@ -96,7 +97,8 @@ struct DashboardView: View {
                 MonthCalendarView().frame(width: 360).glass(tint: theme.glassTint)
             case "weather":
                 if let weather = viewModel.weather {
-                    WeatherDetailView(weather: weather, city: theme.city).frame(width: 400).glass(tint: theme.glassTint)
+                    WeatherDetailView(weather: weather, city: theme.city, lang: theme.displayLanguage)
+                        .frame(width: 400).glass(tint: theme.glassTint)
                 }
             case "stats":
                 StatsDetailView(monitor: viewModel.stats).frame(width: 360).glass(tint: theme.glassTint)
@@ -154,6 +156,12 @@ struct DashboardView: View {
         case "notes":
             if divider { Divider().overlay(.white.opacity(0.15)) }
             card("notes") { expanded in NotesWidget(expanded: expanded, store: .shared) }
+        case "reminders":
+            if divider { Divider().overlay(.white.opacity(0.15)) }
+            card("reminders") { expanded in RemindersWidget(expanded: expanded, service: viewModel.remindersService) }
+        case "countdown":
+            if divider { Divider().overlay(.white.opacity(0.15)) }
+            card("countdown") { expanded in CountdownWidget(expanded: expanded, theme: theme) }
         case "gallery":
             if divider { Divider().overlay(.white.opacity(0.15)) }
             card("gallery") { expanded in GalleryWidget(expanded: expanded, gallery: viewModel.gallery) }
@@ -214,28 +222,43 @@ extension View {
 }
 
 private struct MoodTintKey: EnvironmentKey { static let defaultValue = Color.clear }
+private struct ReduceTransparencyKey: EnvironmentKey { static let defaultValue = false }
 
 extension EnvironmentValues {
     var moodTint: Color {
         get { self[MoodTintKey.self] }
         set { self[MoodTintKey.self] = newValue }
     }
+    var gvReduceTransparency: Bool {
+        get { self[ReduceTransparencyKey.self] }
+        set { self[ReduceTransparencyKey.self] = newValue }
+    }
 }
 
 private struct Glass: ViewModifier {
     let tint: Double
     @Environment(\.moodTint) private var moodTint
+    @Environment(\.gvReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
         content
             .padding(24)
-            .background(moodTint.background(Color.black.opacity(tint)).background(VisualEffectBlur()))
+            .background(moodTint.background(Color.black.opacity(tint)).background(blur))
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .strokeBorder(.white.opacity(0.18), lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.25), radius: 30, y: 10)
+    }
+
+    @ViewBuilder private var blur: some View {
+        if reduceTransparency {
+            // Accessibility → Reduce Transparency: a solid scrim instead of behind-window blur.
+            Color.black.opacity(min(tint + 0.45, 0.92))
+        } else {
+            VisualEffectBlur()
+        }
     }
 }
 
