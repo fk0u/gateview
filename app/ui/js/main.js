@@ -39,7 +39,11 @@ function lang() {
   if (mode === "id" || mode === "en") return mode;
   return (navigator.language || "").toLowerCase().startsWith("id") ? "id" : "en";
 }
-const t = (key, ...args) => L[lang()][key](...args);
+// Most entries are plain strings; only a few (daysLeft) are functions of their arguments.
+const t = (key, ...args) => {
+  const v = L[lang()][key];
+  return typeof v === "function" ? v(...args) : v;
+};
 
 // MARK: Clock & date (ticks locally every second, like the macOS TimelineView)
 
