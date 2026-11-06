@@ -1,6 +1,6 @@
 # GateView on Windows & Linux — Rust Architecture
 
-Status (2026-11-06): **M0 ✅ · M1 built in CI (Windows .msi/.exe + launch smoke test) · Linux preview builds in CI (.deb/AppImage)**. Real-hardware testing: Linux by the maintainer; Windows still needs a tester.
+Status (2026-11-06): **M0 ✅ · M1 built in CI (Windows .msi/.exe + launch smoke test) · Linux preview builds in CI (.deb/AppImage)**. What is verified: both build in CI; on a Windows Server runner the app launches, writes its config, and renders clock, greeting, prayer times (identical to Aladhan), weather and stats (screenshot is a CI artifact). What is **not** verified: click-through/hover on a real desktop, SMTC Now Playing, adhan audio, and anything on Linux hardware.
 
 Previous status (October 2026): **M0 ✅ + M1 code-complete**. M0: `crates/gateview-core` passes 26 tests including a **golden dataset printed by the Swift app itself** (`Tests/golden.swift` → `crates/gateview-core/tests/golden.rs`): prayer times to the minute, iqamah offsets, countdown format, Hijri dates and theme.json decoding are verified identical. One finding: ICU4X's bundled Umm-al-Qura computation drifts a day from Apple's calendar on some month boundaries, so the exact month-start table (AH 1441–1472) is exported from Swift into `Tests/fixtures/umm-alqura-months.json` and consumed by Rust (ICU remains the fallback outside that range).
 

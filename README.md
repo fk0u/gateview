@@ -106,7 +106,7 @@ Use the menu bar icon → **Settings…**, or edit `~/.config/gateview/theme.jso
 ## Roadmap
 
 - **Windows & Linux — preview.** A Rust engine (`crates/gateview-core`, verified against the Swift app to the minute) and a Tauri 2 shell (`app/`). Every push builds them in CI:
-  - **Windows**: `.msi` + `setup.exe`, plus an automatic 20-second launch test with a screenshot (CI artifact `gateview-windows`). Not yet tested on a real PC; testers welcome.
+  - **Windows**: `.msi` + `setup.exe`, plus an automatic 20-second launch test with a screenshot (CI artifact `gateview-windows`). Verified on a CI Windows runner (dashboard renders with live prayer times and weather); not yet tried on a real PC, so click-through, Now Playing and adhan audio are untested. Testers welcome.
   - **Linux**: `.deb` + `.AppImage` (CI artifact `gateview-linux`). Sits below your windows; on X11 widgets are clickable, on Wayland display-only for now. Now Playing (MPRIS) comes in M3.
   - Later: a macOS-style **Dock** and **menu bar** for Windows/Linux (M2), and full Linux integration (M3). Details and milestones in [docs/CROSSPLATFORM.md](docs/CROSSPLATFORM.md).
 
