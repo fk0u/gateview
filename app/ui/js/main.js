@@ -156,7 +156,13 @@ function countdownBody() {
 
 function nowPlayingBody() {
   const np = state.now_playing;
-  if (!np) return `<div class="next-in" style="opacity:.45">${lang() === "id" ? "Tidak ada pemutaran" : "Nothing playing"}</div>`;
+  if (!np) {
+    // Linux preview: MPRIS support lands in M3.
+    const linux = navigator.userAgent.includes("Linux");
+    const msg = linux ? (lang() === "id" ? "Segera hadir di Linux" : "Coming soon on Linux")
+                      : (lang() === "id" ? "Tidak ada pemutaran" : "Nothing playing");
+    return `<div class="next-in" style="opacity:.45">${msg}</div>`;
+  }
   return `
     <div><div class="np-title">${esc(np.title)}</div><div class="np-artist">${esc(np.artist)}</div></div>
     ${np.duration > 0 ? `

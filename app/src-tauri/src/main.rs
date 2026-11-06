@@ -343,8 +343,31 @@ fn overlay_loop(app: AppHandle) {
     }
 }
 
+/// Linux preview: sit below app windows and stay click-through except over widgets.
+/// X11 reports the global cursor; Wayland doesn't, so there the dashboard is display-only.
 #[cfg(not(windows))]
-fn overlay_loop(_app: AppHandle) {}
+fn overlay_loop(app: AppHandle) {
+    let Some(win) = app.get_webview_window("main") else { return };
+    let _ = win.set_always_on_top(false);
+    let _ = win.set_always_on_bottom(true);
+    let mut last_ignore: Option<bool> = None;
+    loop {
+        let state = app.state::<State>();
+        let interactive = state.theme.lock().unwrap().interactive;
+        let ignore = match (interactive, win.cursor_position(), win.outer_position()) {
+            (true, Ok(c), Ok(pos)) => {
+                let (lx, ly) = (c.x as i32 - pos.x, c.y as i32 - pos.y);
+                !state.regions.lock().unwrap().values().any(|[x, y, w, h]| lx >= *x && lx < *x + *w && ly >= *y && ly < *y + *h)
+            }
+            _ => true,
+        };
+        if last_ignore != Some(ignore) {
+            last_ignore = Some(ignore);
+            let _ = win.set_ignore_cursor_events(ignore);
+        }
+        std::thread::sleep(Duration::from_millis(40));
+    }
+}
 
 // MARK: - Setup
 
