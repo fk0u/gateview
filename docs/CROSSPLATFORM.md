@@ -1,6 +1,8 @@
 # GateView on Windows & Linux — Rust Architecture
 
-Status: **M0 ✅ + M1 code-complete** (October 2026). M0: `crates/gateview-core` passes 26 tests including a **golden dataset printed by the Swift app itself** (`Tests/golden.swift` → `crates/gateview-core/tests/golden.rs`): prayer times to the minute, iqamah offsets, countdown format, Hijri dates and theme.json decoding are verified identical. One finding: ICU4X's bundled Umm-al-Qura computation drifts a day from Apple's calendar on some month boundaries, so the exact month-start table (AH 1441–1472) is exported from Swift into `Tests/fixtures/umm-alqura-months.json` and consumed by Rust (ICU remains the fallback outside that range).
+Status (2026-11-06): **M0 ✅ · M1 built in CI (Windows .msi/.exe + launch smoke test) · Linux preview builds in CI (.deb/AppImage)**. Real-hardware testing: Linux by the maintainer; Windows still needs a tester.
+
+Previous status (October 2026): **M0 ✅ + M1 code-complete**. M0: `crates/gateview-core` passes 26 tests including a **golden dataset printed by the Swift app itself** (`Tests/golden.swift` → `crates/gateview-core/tests/golden.rs`): prayer times to the minute, iqamah offsets, countdown format, Hijri dates and theme.json decoding are verified identical. One finding: ICU4X's bundled Umm-al-Qura computation drifts a day from Apple's calendar on some month boundaries, so the exact month-start table (AH 1441–1472) is exported from Swift into `Tests/fixtures/umm-alqura-months.json` and consumed by Rust (ICU remains the fallback outside that range).
 
 M1: the Tauri 2 Windows shell is written and type-checked (`app/src-tauri` + `app/ui`, with `crates/gateview-providers` providing SMTC Now Playing, sysinfo stats and Win32 helpers). `cargo check` passes on macOS and for the `x86_64-pc-windows-msvc` target; **the actual .msi build must run on Windows** (tauri-winres needs the Windows resource toolchain):
 
@@ -113,9 +115,9 @@ Both bundle webview dependencies: Windows uses WebView2 (preinstalled on Win11, 
 ## 7. Milestones
 
 - **M0 — core extraction ✅ (done 2026-10-24):** `crates/gateview-core` with prayer/weather/countdown/config/l10n/mood/hijri + Rust test suite; golden dataset asserts equality with the Swift implementation to the minute (see header note).
-- **M1 — Windows MVP (weeks 3–6):** Tauri shell, dashboard widgets (clock, prayer, weather+AQ, Now Playing via SMTC, countdown, notes), auto-hide-on-fullscreen, glass/acrylic, installer. No dock yet — dashboard first.
-- **M2 — Dock & menu bar Windows (weeks 7–10):** AppBar edge reservation, magnification, pins, tray area.
-- **M3 — Linux MVP + .deb (weeks 11–14):** same widget set, MPRIS, notifications, KDE layer-shell dock, X11 strut fallback, `.deb` + AppImage.
+- **M1 — Windows MVP (built in CI since 2026-11-06; awaiting a real-PC test):** Tauri shell, dashboard widgets (clock, prayer, weather+AQ, Now Playing via SMTC, countdown, notes), auto-hide-on-fullscreen, glass/acrylic, installer. No dock yet — dashboard first.
+- **M2 — Dock & menu bar (kept on the roadmap; after the Windows & Linux dashboards are stable):** AppBar edge reservation, magnification, pins, tray area.
+- **M3 — Linux MVP + .deb:** *preview started 2026-11-06* (CI builds `.deb` + AppImage; always-on-bottom overlay, X11 click-through by cursor, Wayland display-only). Remaining: same widget set, MPRIS, notifications, KDE layer-shell dock, X11 strut fallback, `.deb` + AppImage.
 - **M4 — parity:** ICS agenda/reminders, wallpaper accent, global menu on KDE, per-DE polish.
 
 ## 8. Risks

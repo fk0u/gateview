@@ -2,12 +2,12 @@
 
 <p align="center">
   <a href="https://github.com/fk0u/gateview/actions/workflows/ci.yml"><img src="https://github.com/fk0u/gateview/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-2.3.0-FFC56B" alt="Version 2.3.0">
+  <img src="https://img.shields.io/badge/version-2.3.1-FFC56B" alt="Version 2.3.1">
   <img src="https://img.shields.io/badge/macOS-13%2B_Ventura-black?logo=apple&logoColor=white" alt="Ready for macOS 13+">
   <img src="https://img.shields.io/badge/Apple_Silicon_%2B_Intel-universal-0A84FF" alt="Universal binary">
   <img src="https://img.shields.io/badge/RAM-~16_MB-34C759" alt="~16 MB RAM">
   <img src="https://img.shields.io/badge/CPU-~2%25-34C759" alt="~2% CPU">
-  <a href="docs/CROSSPLATFORM.md"><img src="https://img.shields.io/badge/Windows_%2B_Linux-coming_soon_(Rust)-F08A3C" alt="Windows & Linux coming soon"></a>
+  <a href="docs/CROSSPLATFORM.md"><img src="https://img.shields.io/badge/Windows_%2B_Linux-preview_(Rust_%2B_Tauri)-F08A3C" alt="Windows & Linux preview"></a>
 </p>
 
 # GateView
@@ -105,7 +105,10 @@ Use the menu bar icon → **Settings…**, or edit `~/.config/gateview/theme.jso
 
 ## Roadmap
 
-- **Windows & Linux (.deb) — coming soon.** GateView is coming to other desktops, with a bigger ambition than a port: a macOS-style **Dock** that replaces the Windows taskbar / Linux dock, and a macOS-style **menu bar** on top of the screen — the same ambient dashboard (clock, prayer times, weather, Now Playing, widgets) behind it all. The plan: a **Rust engine** (`gateview-core`, one shared implementation of prayer times, weather, config and localization) with a Tauri 2 shell — full breakdown, feature mapping and milestones in [docs/CROSSPLATFORM.md](docs/CROSSPLATFORM.md).
+- **Windows & Linux — preview.** A Rust engine (`crates/gateview-core`, verified against the Swift app to the minute) and a Tauri 2 shell (`app/`). Every push builds them in CI:
+  - **Windows**: `.msi` + `setup.exe`, plus an automatic 20-second launch test with a screenshot (CI artifact `gateview-windows`). Not yet tested on a real PC; testers welcome.
+  - **Linux**: `.deb` + `.AppImage` (CI artifact `gateview-linux`). Sits below your windows; on X11 widgets are clickable, on Wayland display-only for now. Now Playing (MPRIS) comes in M3.
+  - Later: a macOS-style **Dock** and **menu bar** for Windows/Linux (M2), and full Linux integration (M3). Details and milestones in [docs/CROSSPLATFORM.md](docs/CROSSPLATFORM.md).
 
 ## Notes
 

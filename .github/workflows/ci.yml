@@ -44,14 +44,18 @@ jobs:
         run: |
           $exe = "target/release/gateview.exe"
           $p = Start-Process $exe -PassThru
-          Start-Sleep -Seconds 20
+          Start-Sleep -Seconds 15
+          (New-Object -ComObject Shell.Application).MinimizeAll()
+          Start-Sleep -Seconds 5
           if ($p.HasExited) { throw "GateView exited early with code $($p.ExitCode)" }
           $theme = Join-Path $env:APPDATA "com.alghani.gateview\theme.json"
           if (-not (Test-Path $theme)) { throw "theme.json was not created at $theme" }
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
           $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          # CaptureBlt (0x40000000): without it, transparent/layered windows like GateView are skipped.
+          $op = [System.Drawing.CopyPixelOperation]([int][System.Drawing.CopyPixelOperation]::SourceCopy -bor 0x40000000)
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size, $op)
           $bmp.Save("smoke-screenshot.png")
           Stop-Process $p
           Write-Host "GateView ran 20 s; theme.json at $theme"
