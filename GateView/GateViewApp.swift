@@ -21,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     let viewModel = DashboardViewModel()
     private var settingsWindow: NSWindow?
 
+    func applicationWillTerminate(_ notification: Notification) {
+        ThemeStore.shared.flush() // don't lose a slider change made just before quitting
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory) // no Dock icon
         UNUserNotificationCenter.current().delegate = self
@@ -67,7 +71,7 @@ private struct MenuContent: View {
     let viewModel: DashboardViewModel
     @ObservedObject var store: ThemeStore
     @ObservedObject var updates = UpdateService.shared
-    let openSettings: () -> Void
+    let openSettings: @MainActor () -> Void
 
     var body: some View {
         Button("Settings…", action: openSettings)

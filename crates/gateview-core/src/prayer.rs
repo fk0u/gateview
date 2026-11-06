@@ -170,7 +170,7 @@ pub fn day_key(date: DateTime<Utc>) -> String {
     format!("{:02}-{:02}-{:04}", date.day(), date.month(), date.year())
 }
 
-/// Aladhan `timingsByCity` / `calendarByCity` response subset.
+/// Aladhan `timings` / `calendar` response subset.
 #[derive(Debug, Deserialize)]
 struct AladhanResponse {
     data: AladhanPayload,
@@ -181,19 +181,26 @@ struct AladhanPayload {
     timings: BTreeMap<String, String>,
 }
 
-/// Fetch today's timings (mirrors `todayTimings`; caching stays with the shell app).
-pub fn fetch_today(city: &str, country: &str, method: u32) -> Result<PrayerDay, String> {
-    let body = ureq::get("https://api.aladhan.com/v1/timingsByCity")
-        .query("city", city)
-        .query("country", country)
+/// Fetch today's timings by coordinates (mirrors `todayTimings`; caching stays with the shell app).
+/// The date is the *local* calendar day: in UTC+8, UTC is still "yesterday" before 08:00.
+pub fn fetch_today(latitude: f64, longitude: f64, method: u32) -> Result<PrayerDay, String> {
+    let today = local_day_key();
+    let body = ureq::get(&format!("https://api.aladhan.com/v1/timings/{today}"))
+        .query("latitude", &latitude.to_string())
+        .query("longitude", &longitude.to_string())
         .query("method", &method.to_string())
         .call()
         .map_err(|e| e.to_string())?;
     let r: AladhanResponse = body.into_json().map_err(|e| e.to_string())?;
     Ok(PrayerDay {
-        date: day_key(Utc::now()),
+        date: today,
         timings: r.data.timings,
     })
+}
+
+fn local_day_key() -> String {
+    let d = chrono::Local::now().date_naive();
+    format!("{:02}-{:02}-{:04}", d.day(), d.month(), d.year())
 }
 
 #[cfg(test)]

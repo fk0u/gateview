@@ -6,7 +6,7 @@ import AppKit
 @MainActor
 final class AppleScriptNowPlaying {
     /// Both scripts emit fields joined by ASCII 31 (unit separator, never in tags), one per line.
-    private static let sep = "\u{1F}"
+    private nonisolated static let sep = "\u{1F}"
     static let players: [(bundleID: String, scriptName: String)] = [
         ("com.spotify.client", "Spotify"),
         ("com.apple.Music", "Music"),

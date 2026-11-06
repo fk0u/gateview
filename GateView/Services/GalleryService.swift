@@ -15,7 +15,7 @@ final class GalleryService: ObservableObject {
     private var next: NSImage?
     private var task: Task<Void, Never>?
 
-    static let extensions: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "gif", "webp"]
+    nonisolated static let extensions: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "gif", "webp"]
 
     func start(folder: String, interval: Double) {
         stop()
@@ -63,7 +63,7 @@ final class GalleryService: ObservableObject {
 
     private func show(_ i: Int) async {
         let url = files[i]
-        current = await Self.load(url)
+        current = await Self.load(url)?.image
         currentURL = url
         await preload()
     }
@@ -71,7 +71,7 @@ final class GalleryService: ObservableObject {
     private func preload() async {
         guard files.count > 1 else { return }
         let url = files[(index + 1) % files.count]
-        next = await Self.load(url)
+        next = await Self.load(url)?.image
     }
 
     nonisolated static func images(in folder: URL) -> [URL] {
@@ -80,7 +80,10 @@ final class GalleryService: ObservableObject {
     }
 
     /// Decode off the main thread, downsampled: a 24 MP photo costs ~3 MB instead of ~100 MB.
-    nonisolated static func load(_ url: URL) async -> NSImage? {
+    /// Immutable once created, so it is safe to hand from the decode task to the main actor.
+    struct DecodedImage: @unchecked Sendable { let image: NSImage }
+
+    nonisolated static func load(_ url: URL) async -> DecodedImage? {
         await Task.detached(priority: .utility) {
             guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
                   let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, [
@@ -89,7 +92,7 @@ final class GalleryService: ObservableObject {
                       kCGImageSourceThumbnailMaxPixelSize: 900,
                   ] as CFDictionary)
             else { return nil }
-            return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+            return DecodedImage(image: NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height)))
         }.value
     }
 }

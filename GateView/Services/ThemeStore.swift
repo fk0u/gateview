@@ -134,9 +134,10 @@ final class ThemeStore: ObservableObject {
         .appendingPathComponent(".config/gateview/theme.json")
 
     @Published var theme: Theme {
-        didSet { if theme != oldValue { save() } }
+        didSet { if theme != oldValue { scheduleSave() } }
     }
     @Published private(set) var loadError: String?
+    private var pendingSave: Task<Void, Never>?
     /// Accessibility → Reduce Transparency: glass becomes a solid scrim (no behind-window blur).
     @Published private(set) var reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
 
@@ -182,7 +183,26 @@ final class ThemeStore: ObservableObject {
         }
     }
 
+    /// Sliders change the theme many times a second: apply instantly in memory, write the file once
+    /// it settles (300 ms). `flush()` writes immediately (used on quit).
+    private func scheduleSave() {
+        pendingSave?.cancel()
+        pendingSave = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            self?.save()
+        }
+    }
+
+    func flush() {
+        guard pendingSave != nil else { return }
+        pendingSave?.cancel()
+        pendingSave = nil
+        save()
+    }
+
     private func save() {
+        pendingSave = nil
         try? FileManager.default.createDirectory(at: Self.url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -190,6 +210,7 @@ final class ThemeStore: ObservableObject {
     }
 
     private func reload() {
+        guard pendingSave == nil else { return } // our own unsaved edit wins
         guard let data = try? Data(contentsOf: Self.url) else { return }
         do {
             let fresh = try Theme.decode(data)

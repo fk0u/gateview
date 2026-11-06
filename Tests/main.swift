@@ -1,4 +1,4 @@
-// Run: swiftc GateView/Models/*.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore,MoodEngine,WallpaperColorService,NowPlayingService,AppleScriptNowPlaying,RemindersService,GalleryService,L10n}.swift Tests/main.swift -o /tmp/gv-check && /tmp/gv-check
+// Run: Tests/run.sh
 import Foundation
 import SwiftUI
 

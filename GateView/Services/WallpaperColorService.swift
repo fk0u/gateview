@@ -16,7 +16,7 @@ final class WallpaperColorService {
     func start() {
         guard task == nil else { return }
         lastURL = nil
-        let refresh: (Notification) -> Void = { [weak self] _ in
+        let refresh: @Sendable (Notification) -> Void = { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in self.check() }
         }

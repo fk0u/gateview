@@ -40,7 +40,9 @@ final class WindowManager: ObservableObject {
             defer: false
         )
         window.hidesOnDeactivate = false // panels hide when their app deactivates by default
-        window.becomesKeyOnlyIfNeeded = false
+        // Become key only for views that need the keyboard (the Notes editor); a plain widget click
+        // leaves keyboard focus with the app you were using.
+        window.becomesKeyOnlyIfNeeded = true
         // One above Finder's desktop-icon window (which covers the whole screen and would swallow clicks),
         // still below every app window. Elsewhere the window stays click-through, so icons keep working.
         window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)

@@ -59,7 +59,7 @@ Requires Xcode 15+ command line tools.
 Self-check for the prayer, weather, stats, countdown, theme and Now Playing logic:
 
 ```bash
-swiftc GateView/Models/*.swift GateView/Services/{PrayerTimeService,WeatherService,SystemStatsService,ReminderService,ThemeStore,MoodEngine,WallpaperColorService,NowPlayingService,AppleScriptNowPlaying,RemindersService,GalleryService,L10n}.swift Tests/main.swift -o /tmp/gv-check && /tmp/gv-check
+Tests/run.sh
 ```
 
 ## Customize

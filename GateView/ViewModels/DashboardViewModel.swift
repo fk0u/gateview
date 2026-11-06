@@ -10,6 +10,8 @@ final class DashboardViewModel: ObservableObject {
     @Published private(set) var events: [Agenda] = []
     @Published private(set) var calendarAuthorized = false
     @Published private(set) var weather: Weather?
+    /// Mirrors whether the Now Playing widget is showing, so the panel can place dividers correctly.
+    @Published private(set) var nowPlayingActive = false
     @Published private(set) var todayTimings: [String: String] = [:] // incl. Imsak, Sunrise for the detail card
     @Published private(set) var week: [PrayerDay] = []
     @Published private(set) var mood = Mood()
@@ -50,8 +52,10 @@ final class DashboardViewModel: ObservableObject {
             },
         ]
         Task { await refresh() }
-        // Debug: `GateView -GateViewPreviewEffect 63` forces a weather effect (used to measure CPU).
+        #if DEBUG
+        // Dev only: `GateView -GateViewPreviewEffect 63` forces a weather effect (used to measure CPU).
         let code = UserDefaults.standard.integer(forKey: "GateViewPreviewEffect"); if code > 0 { effectPreview = code }
+        #endif
 
         // Location / iqamah edits (Settings or theme.json) → refetch. dropFirst: init already loads.
         store.$theme.map(\.locationKey).removeDuplicates().dropFirst()
@@ -89,6 +93,9 @@ final class DashboardViewModel: ObservableObject {
         }
         store.$theme.map(\.showStats).removeDuplicates()
             .sink { [weak self] on in on ? self?.stats.start() : self?.stats.stop() }
+            .store(in: &subscriptions)
+        nowPlaying.$track.map { $0?.isPlaying ?? false }.removeDuplicates()
+            .sink { [weak self] in self?.nowPlayingActive = $0 }
             .store(in: &subscriptions)
         store.$theme.map { $0.panelWidgets.contains("nowPlaying") }.removeDuplicates()
             .sink { [weak self] on in on ? self?.nowPlaying.start() : self?.nowPlaying.stop() }
@@ -140,7 +147,7 @@ final class DashboardViewModel: ObservableObject {
     func loadWeek() async {
         guard week.isEmpty else { return }
         let t = store.theme
-        week = await prayerService.week(city: t.city, country: t.country, method: t.prayerMethod)
+        week = await prayerService.week(latitude: t.latitude, longitude: t.longitude, method: t.prayerMethod)
     }
 
     func events(on day: Date) -> [Agenda] {
@@ -158,7 +165,7 @@ final class DashboardViewModel: ObservableObject {
     private func loadPrayers(force: Bool) async {
         do {
             let t = store.theme
-            let day = try await prayerService.todayTimings(city: t.city, country: t.country, method: t.prayerMethod, force: force)
+            let day = try await prayerService.todayTimings(latitude: t.latitude, longitude: t.longitude, method: t.prayerMethod, force: force)
             prayers = PrayerTimeService.prayers(from: day, iqamah: t.iqamah)
             todayTimings = day.timings
             updateMood()

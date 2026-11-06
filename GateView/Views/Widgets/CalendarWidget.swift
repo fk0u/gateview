@@ -3,7 +3,7 @@ import SwiftUI
 /// Compact: this month. Expanded: browse months, pick a day, see its events.
 struct CalendarWidget: View {
     let expanded: Bool
-    let eventsOn: (Date) -> [Agenda]
+    let eventsOn: @MainActor (Date) -> [Agenda]
     @State private var offset = 0
     @State private var selected = Date()
 

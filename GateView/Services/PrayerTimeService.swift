@@ -3,14 +3,16 @@ import Foundation
 @MainActor
 final class PrayerTimeService {
     // API key → display name. Iqamah minutes come from the theme (Settings).
-    static let schedule: [(key: String, label: String)] = [
+    nonisolated static let schedule: [(key: String, label: String)] = [
         ("Fajr", "Subuh"), ("Dhuhr", "Dzuhur"), ("Asr", "Ashar"), ("Maghrib", "Maghrib"), ("Isha", "Isya"),
     ]
     private let cacheKey = "GateView.prayerDay"
 
     /// Cached once per day; network only when the cache is from another day (or forced).
-    func todayTimings(city: String, country: String, method: Int, force: Bool = false) async throws -> PrayerDay {
-        let today = Self.dayKey(for: .now) + "|\(city)|\(country)|\(method)"
+    /// By coordinates (from Settings' city search): exact, and immune to ambiguous city names.
+    func todayTimings(latitude: Double, longitude: Double, method: Int, force: Bool = false) async throws -> PrayerDay {
+        let dayKey = Self.dayKey(for: .now)
+        let today = dayKey + "|\(latitude)|\(longitude)|\(method)"
         if !force,
            let data = UserDefaults.standard.data(forKey: cacheKey),
            let cached = try? JSONDecoder().decode(PrayerDay.self, from: data),
@@ -19,12 +21,8 @@ final class PrayerTimeService {
         }
 
         // HTTPS: plain http is blocked by App Transport Security.
-        var components = URLComponents(string: "https://api.aladhan.com/v1/timingsByCity")!
-        components.queryItems = [
-            URLQueryItem(name: "city", value: city),
-            URLQueryItem(name: "country", value: country),
-            URLQueryItem(name: "method", value: String(method)),
-        ]
+        var components = URLComponents(string: "https://api.aladhan.com/v1/timings/\(dayKey)")!
+        components.queryItems = Self.location(latitude, longitude, method)
         let (data, response) = try await URLSession.shared.data(from: components.url!)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
 
@@ -36,16 +34,15 @@ final class PrayerTimeService {
     private var monthCache: [String: [PrayerDay]] = [:]
 
     /// Next 7 days for the detail card. Fetched only when opened, cached per month in memory.
-    func week(city: String, country: String, method: Int, from start: Date = .now) async -> [PrayerDay] {
+    func week(latitude: Double, longitude: Double, method: Int, from start: Date = .now) async -> [PrayerDay] {
         let cal = Calendar.current
         let dates = (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: start) }
         var days: [PrayerDay] = []
         for month in Set(dates.map { cal.dateComponents([.year, .month], from: $0) }) {
-            let key = "\(month.year!)-\(month.month!)|\(city)|\(country)|\(method)"
+            let key = "\(month.year!)-\(month.month!)|\(latitude)|\(longitude)|\(method)"
             if monthCache[key] == nil {
-                var components = URLComponents(string: "https://api.aladhan.com/v1/calendarByCity/\(month.year!)/\(month.month!)")!
-                components.queryItems = [URLQueryItem(name: "city", value: city), URLQueryItem(name: "country", value: country),
-                                         URLQueryItem(name: "method", value: String(method))]
+                var components = URLComponents(string: "https://api.aladhan.com/v1/calendar/\(month.year!)/\(month.month!)")!
+                components.queryItems = Self.location(latitude, longitude, method)
                 struct Response: Decodable {
                     struct Item: Decodable {
                         struct DateInfo: Decodable { struct G: Decodable { let date: String }; let gregorian: G }
@@ -61,6 +58,11 @@ final class PrayerTimeService {
         }
         let wanted = dates.map { Self.dayKey(for: $0) }
         return wanted.compactMap { w in days.first { $0.date == w } }
+    }
+
+    nonisolated static func location(_ latitude: Double, _ longitude: Double, _ method: Int) -> [URLQueryItem] {
+        [URLQueryItem(name: "latitude", value: String(latitude)), URLQueryItem(name: "longitude", value: String(longitude)),
+         URLQueryItem(name: "method", value: String(method))]
     }
 
     nonisolated static func time(_ raw: String?, on date: Date) -> Date? {

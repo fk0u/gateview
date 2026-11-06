@@ -9,6 +9,20 @@ All notable changes to GateView. The app follows semver-ish numbering; every rel
 - **Windows shell, milestone M1** (`app/src-tauri` + `app/ui` + `crates/gateview-providers`): Tauri 2 overlay — transparent, always-on-top, click-through outside widgets; clock, prayer times with phase countdown, weather + air quality, Now Playing via the Windows SMTC API (with artwork), Countdown and Notes widgets; acrylic glass; theme.json live reload (same schema as macOS); adzan reminders with audio playback; auto-hide on fullscreen apps. Type-checked for `x86_64-pc-windows-msvc`; the .msi build itself runs on Windows.
 
 
+## 2.3.1 — 2026-11-06
+
+### Fixed
+- **Keyboard focus**: clicking a widget no longer pulls keyboard focus away from the app you were using; GateView only takes the keyboard for the Notes editor.
+- **Prayer times use your coordinates** (from Settings' city search) instead of the city name, so they are exact and can't pick the wrong city with the same name. The Rust engine does the same and uses the local date.
+- Settings sliders no longer rewrite `theme.json` dozens of times a second (saved 300 ms after you stop; flushed on quit).
+- No stray divider at the top of the panel when Now Playing is first and nothing is playing.
+- Ready for Swift 6: all concurrency warnings resolved.
+
+### Changed
+- The weather-effect debug switch is only in debug builds.
+- CI is green again: the Rust job tests the engine crates only (the Tauri app is built in its own jobs). Self-check is `Tests/run.sh` and picks up new services automatically.
+- Logo concept sketches moved from `icon/` to `docs/design/`.
+
 ## 2.3.0 — 2026-10-24
 
 ### Added

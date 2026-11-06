@@ -182,7 +182,7 @@ fn prayer_loop(app: AppHandle) {
             None => true,
         };
         if needs_fetch {
-            match prayer::fetch_today(&theme.city, &theme.country, theme.prayer_method) {
+            match prayer::fetch_today(theme.latitude, theme.longitude, theme.prayer_method) {
                 Ok(day) => {
                     let prayers = prayer::prayers_from(&day, chrono::Utc::now(), &theme.iqamah);
                     *app.state::<State>().prayers.lock().unwrap() = prayers;

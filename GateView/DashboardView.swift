@@ -118,7 +118,11 @@ struct DashboardView: View {
     @ViewBuilder private func panel(_ theme: Theme) -> some View {
         if !theme.panelWidgets.isEmpty { // empty panel → no glass card at all
         VStack(alignment: .leading, spacing: 20) {
-            ForEach(Array(theme.panelWidgets.enumerated()), id: \.element) { index, key in
+            // Dividers only between widgets that are actually on screen (Now Playing hides when idle).
+            let visible = theme.panelWidgets.filter {
+                $0 != "nowPlaying" || viewModel.nowPlayingActive || windows.expanded == "nowPlaying"
+            }
+            ForEach(Array(visible.enumerated()), id: \.element) { index, key in
                 panelWidget(key, theme: theme, divider: index > 0)
             }
         }
