@@ -206,6 +206,18 @@ fn local_day_key() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression guard for "no TLS backend is configured" (every request failed in the first Windows build).
+    /// Needs no network: an HTTPS URL to a closed port must fail with a connection error, never UnknownScheme.
+    /// Note: on macOS this passes with either ureq TLS setting, so it only really bites on the Windows CI job.
+    #[test]
+    fn https_is_supported() {
+        let err = ureq::get("https://127.0.0.1:1/").timeout(std::time::Duration::from_secs(2)).call().unwrap_err();
+        match err {
+            ureq::Error::Transport(t) => assert_ne!(t.kind(), ureq::ErrorKind::UnknownScheme, "TLS backend missing: {t}"),
+            other => panic!("unexpected error: {other}"),
+        }
+    }
     use chrono::{Datelike, TimeZone};
 
     fn at(h: u32, m: u32, base: DateTime<Utc>) -> DateTime<Utc> {
