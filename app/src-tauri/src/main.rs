@@ -292,7 +292,9 @@ fn adhan_path(theme: &Theme, key: &str) -> Option<PathBuf> {
 #[cfg(windows)]
 fn play_audio(path: &PathBuf, volume: f32, prev: Option<rodio::OutputStream>) -> Option<rodio::OutputStream> {
     drop(prev);
-    let Ok((stream, sink)) = rodio::OutputStream::try_default() else { return None };
+    // rodio 0.19: try_default() gives the stream + a handle; playback goes through a Sink on that handle.
+    let Ok((stream, handle)) = rodio::OutputStream::try_default() else { return None };
+    let Ok(sink) = rodio::Sink::try_new(&handle) else { return Some(stream) };
     if let Ok(file) = std::fs::File::open(path) {
         if let Ok(source) = rodio::Decoder::new(std::io::BufReader::new(file)) {
             sink.set_volume(volume.clamp(0.0, 1.0));
