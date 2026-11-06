@@ -26,3 +26,41 @@ jobs:
       # Only the engine crates: the Tauri app needs GTK/WebKit and is built in its own jobs.
       - name: Tests (unit + Swift golden dataset)
         run: cargo test -p gateview-core -p gateview-providers
+
+  windows:
+    name: Windows (Tauri build + smoke test)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Engine tests (incl. cfg(windows) providers)
+        run: cargo test -p gateview-core -p gateview-providers
+      - name: Build installers (.msi + setup .exe)
+        working-directory: app/src-tauri
+        run: npx --yes @tauri-apps/cli@2 build --bundles msi,nsis
+      - name: Smoke test (launch 20 s, theme.json, screenshot)
+        shell: pwsh
+        run: |
+          $exe = "target/release/gateview.exe"
+          $p = Start-Process $exe -PassThru
+          Start-Sleep -Seconds 20
+          if ($p.HasExited) { throw "GateView exited early with code $($p.ExitCode)" }
+          $theme = Join-Path $env:APPDATA "com.alghani.gateview\theme.json"
+          if (-not (Test-Path $theme)) { throw "theme.json was not created at $theme" }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("smoke-screenshot.png")
+          Stop-Process $p
+          Write-Host "GateView ran 20 s; theme.json at $theme"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gateview-windows
+          path: |
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
+            smoke-screenshot.png
+          if-no-files-found: warn
