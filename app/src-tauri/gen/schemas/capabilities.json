@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"GateView main window: events (dashboard/theme/stats), app commands and notifications.","local":true,"windows":["main"],"permissions":["core:default","notification:default"]}}
