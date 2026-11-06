@@ -51,11 +51,19 @@ jobs:
           $theme = Join-Path $env:APPDATA "com.alghani.gateview\theme.json"
           if (-not (Test-Path $theme)) { throw "theme.json was not created at $theme" }
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          # BitBlt with CAPTUREBLT: CopyFromScreen can't express the flag, and without it
+          # transparent/layered windows like GateView are left out of the capture.
+          Add-Type -Namespace Win32 -Name Cap -MemberDefinition @'
+            [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern System.IntPtr GetDC(System.IntPtr hwnd);
+            [System.Runtime.InteropServices.DllImport("user32.dll")] public static extern int ReleaseDC(System.IntPtr hwnd, System.IntPtr dc);
+            [System.Runtime.InteropServices.DllImport("gdi32.dll")] public static extern bool BitBlt(System.IntPtr dst, int x, int y, int w, int h, System.IntPtr src, int sx, int sy, int rop);
+'@
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
           $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          # CaptureBlt (0x40000000): without it, transparent/layered windows like GateView are skipped.
-          $op = [System.Drawing.CopyPixelOperation]([int][System.Drawing.CopyPixelOperation]::SourceCopy -bor 0x40000000)
-          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size, $op)
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $dst = $g.GetHdc(); $src = [Win32.Cap]::GetDC([IntPtr]::Zero)
+          [void][Win32.Cap]::BitBlt($dst, 0, 0, $b.Width, $b.Height, $src, $b.X, $b.Y, 0x00CC0020 -bor 0x40000000)
+          [void][Win32.Cap]::ReleaseDC([IntPtr]::Zero, $src); $g.ReleaseHdc($dst); $g.Dispose()
           $bmp.Save("smoke-screenshot.png")
           Stop-Process $p
           Write-Host "GateView ran 20 s; theme.json at $theme"
