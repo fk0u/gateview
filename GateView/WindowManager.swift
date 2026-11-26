@@ -117,7 +117,7 @@ final class WindowManager: ObservableObject {
         let click: (NSEvent) -> Void = { [weak self] _ in
             guard let self else { return }
             let pt = NSEvent.mouseLocation
-            if self.expanded == "notch", let nf = self.notchWindow?.frame, !nf.contains(pt) {
+            if self.expanded == "notch", let rect = self.activeNotchScreenRect(), !rect.contains(pt) {
                 self.expanded = nil
                 return
             }
@@ -165,10 +165,18 @@ final class WindowManager: ObservableObject {
 
     /// Only the widget under the cursor captures the mouse; the rest of the desktop stays clickable.
     private func updateMouse() {
-        guard let window else { return }
-        let id = overlaySuppressed || clickThrough || !store.theme.interactive ? nil : region(at: NSEvent.mouseLocation)
-        if hovered != id { hovered = id }
-        if window.ignoresMouseEvents != (id == nil) { window.ignoresMouseEvents = id == nil } // window-server call: only on change
+        let pt = NSEvent.mouseLocation
+        if let window {
+            let id = overlaySuppressed || clickThrough || !store.theme.interactive ? nil : region(at: pt)
+            if hovered != id { hovered = id }
+            if window.ignoresMouseEvents != (id == nil) { window.ignoresMouseEvents = id == nil } // window-server call: only on change
+        }
+        if let notch = notchWindow, notch.isVisible {
+            let insideNotch = activeNotchScreenRect()?.contains(pt) ?? false
+            if notch.ignoresMouseEvents != !insideNotch {
+                notch.ignoresMouseEvents = !insideNotch
+            }
+        }
     }
 
     /// Fade the whole overlay while a fullscreen app owns the screen (a presentation, a game, a fullscreen browser).
@@ -221,8 +229,10 @@ final class WindowManager: ObservableObject {
     // MARK: Sticky Top-Edge Notch Panel (always in front of all windows)
 
     private func setupNotchWindow(viewModel: DashboardViewModel) {
+        // Fixed transparent canvas so SwiftUI morphs the Notch smoothly downward from y = 0
+        // without NSWindow.setFrame stutter; outside the active Notch rect stays click-through.
         let panel = DesktopWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 280, height: 32),
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 380),
             styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -234,6 +244,8 @@ final class WindowManager: ObservableObject {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
+        panel.ignoresMouseEvents = true
+        panel.acceptsMouseMovedEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         panel.contentView = FirstClickHostingView(
@@ -252,6 +264,16 @@ final class WindowManager: ObservableObject {
         layoutNotch()
     }
 
+    private func activeNotchScreenRect() -> NSRect? {
+        guard store.theme.showNotch && !overlaySuppressed else { return nil }
+        let screens = NSScreen.screens
+        guard let screen = screens.indices.contains(store.theme.displayIndex) ? screens[store.theme.displayIndex] : NSScreen.main else { return nil }
+        let isExpanded = expanded == "notch"
+        let w: CGFloat = isExpanded ? 616 : 368
+        let h: CGFloat = isExpanded ? 356 : 42
+        return NSRect(x: round(screen.frame.midX - w / 2), y: screen.frame.maxY - h, width: w, height: h)
+    }
+
     func focusNotchForTyping() {
         guard let panel = notchWindow, panel.isVisible else { return }
         NSApp.activate(ignoringOtherApps: true)
@@ -266,18 +288,20 @@ final class WindowManager: ObservableObject {
         }
         let screens = NSScreen.screens
         guard let screen = screens.indices.contains(store.theme.displayIndex) ? screens[store.theme.displayIndex] : NSScreen.main else { return }
-        let isExpanded = expanded == "notch"
-        let width: CGFloat = isExpanded ? 596 : 360
-        let height: CGFloat = isExpanded ? 348 : 38
-        let frame = NSRect(
-            x: round(screen.frame.midX - width / 2),
-            y: screen.frame.maxY - height,
-            width: width,
-            height: height
+        let canvasW: CGFloat = 640
+        let canvasH: CGFloat = 380
+        let target = NSRect(
+            x: round(screen.frame.midX - canvasW / 2),
+            y: screen.frame.maxY - canvasH,
+            width: canvasW,
+            height: canvasH
         )
-        panel.setFrame(frame, display: true)
+        if panel.frame != target {
+            panel.setFrame(target, display: true)
+        }
         panel.orderFrontRegardless()
-        if !isExpanded && panel.isKeyWindow {
+        updateMouse()
+        if expanded != "notch" && panel.isKeyWindow {
             panel.resignKey()
             NSApp.deactivate()
         }

@@ -54,21 +54,34 @@ struct NotchView: View {
 
     var body: some View {
         let lang = theme.displayLanguage
-        VStack(spacing: 0) {
+        let targetWidth: CGFloat = expanded ? 596 : (productivity.activeToast != nil ? 356 : 324)
+        let targetHeight: CGFloat = expanded ? 340 : 32
+        let earRadius: CGFloat = expanded ? 14 : 10
+        let bottomRadius: CGFloat = expanded ? 24 : 16
+
+        ZStack(alignment: .top) {
             if expanded {
                 expandedBody(lang: lang)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .offset(y: -14)),
+                        removal: .opacity.combined(with: .offset(y: -10))
+                    ))
             } else {
                 compactBody(lang: lang)
+                    .transition(.opacity)
             }
         }
-        .frame(width: expanded ? 584 : (productivity.activeToast != nil ? 350 : 316))
-        .background(Color(red: 0.024, green: 0.031, blue: 0.051))
-        .clipShape(NotchShape(bottomRadius: expanded ? 24 : 18))
+        .frame(width: targetWidth, height: targetHeight, alignment: .top)
+        .padding(.horizontal, earRadius)
+        .background(Color.black)
+        .clipShape(NotchShape(topEarRadius: earRadius, bottomRadius: bottomRadius))
         .overlay(
-            NotchShape(bottomRadius: expanded ? 24 : 18)
-                .strokeBorder(isDropTargeted ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(0.14)), lineWidth: isDropTargeted ? 2 : 1)
+            NotchShape(topEarRadius: earRadius, bottomRadius: bottomRadius)
+                .strokeBorder(isDropTargeted ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(expanded ? 0.14 : 0.08)), lineWidth: isDropTargeted ? 2 : 1)
         )
-        .shadow(color: .black.opacity(0.58), radius: 16, y: 8)
+        .shadow(color: .black.opacity(expanded ? 0.62 : 0.35), radius: expanded ? 22 : 8, y: expanded ? 10 : 4)
+        .animation(.spring(response: 0.38, dampingFraction: 0.82), value: expanded)
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: productivity.activeToast)
         .onHover { over in
             handleHover(over)
         }
@@ -160,11 +173,8 @@ struct NotchView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                        HStack(spacing: 5) {
-                            cameraDot
-                            if !productivity.shelf.isEmpty {
-                                Circle().fill(.green).frame(width: 5, height: 5)
-                            }
+                        if !productivity.shelf.isEmpty {
+                            Circle().fill(.green).frame(width: 5, height: 5)
                         }
 
                         HStack(spacing: 5) {
@@ -934,14 +944,6 @@ struct NotchView: View {
         }.buttonStyle(.plain)
     }
 
-    private var cameraDot: some View {
-        Circle()
-            .fill(RadialGradient(colors: [Color(red: 0.14, green: 0.19, blue: 0.28), Color(red: 0.04, green: 0.06, blue: 0.09)],
-                                 center: .topLeading, startRadius: 0, endRadius: 6))
-            .overlay(Circle().strokeBorder(.white.opacity(0.08), lineWidth: 0.5))
-            .frame(width: 8, height: 8)
-    }
-
     private func phasePrayer(_ phase: PrayerPhase) -> Prayer {
         switch phase {
         case .upcoming(let p), .iqamah(let p), .ongoing(let p): return p
@@ -962,10 +964,20 @@ struct NotchView: View {
     }
 }
 
-/// Flat top edge flush with the screen bezel, smoothly rounded bottom corners.
+/// True hardware-bezel Notch silhouette: smooth concave top ears flowing seamlessly out of
+/// the top edge of the screen (y = 0) and rounded bottom corners, with animatable morphing.
 private struct NotchShape: InsettableShape {
+    var topEarRadius: CGFloat
     var bottomRadius: CGFloat
     var insetAmount: CGFloat = 0
+
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(topEarRadius, bottomRadius) }
+        set {
+            topEarRadius = newValue.first
+            bottomRadius = newValue.second
+        }
+    }
 
     func inset(by amount: CGFloat) -> NotchShape {
         var copy = self
@@ -974,15 +986,25 @@ private struct NotchShape: InsettableShape {
     }
 
     func path(in rect: CGRect) -> Path {
-        let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
-        let rad = min(bottomRadius, min(r.width / 2, r.height))
+        let ear = max(0, min(topEarRadius, rect.width / 6))
+        let left = rect.minX + ear + insetAmount
+        let right = rect.maxX - ear - insetAmount
+        let top = rect.minY
+        let bottom = rect.maxY - insetAmount
+        let rad = min(bottomRadius, min((right - left) / 2, max(0, bottom - top)))
+
         var p = Path()
-        p.move(to: CGPoint(x: r.minX, y: rect.minY))
-        p.addLine(to: CGPoint(x: r.maxX, y: rect.minY))
-        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - rad))
-        p.addArc(center: CGPoint(x: r.maxX - rad, y: r.maxY - rad), radius: rad, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
-        p.addLine(to: CGPoint(x: r.minX + rad, y: r.maxY))
-        p.addArc(center: CGPoint(x: r.minX + rad, y: r.maxY - rad), radius: rad, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+        // Start at outer top-left ear tip on the screen bezel
+        p.move(to: CGPoint(x: left - ear, y: top))
+        // Concave curve flowing smoothly downward into the left notch wall
+        p.addQuadCurve(to: CGPoint(x: left, y: top + ear), control: CGPoint(x: left, y: top))
+        p.addLine(to: CGPoint(x: left, y: bottom - rad))
+        p.addArc(center: CGPoint(x: left + rad, y: bottom - rad), radius: rad, startAngle: .degrees(180), endAngle: .degrees(90), clockwise: true)
+        p.addLine(to: CGPoint(x: right - rad, y: bottom))
+        p.addArc(center: CGPoint(x: right - rad, y: bottom - rad), radius: rad, startAngle: .degrees(90), endAngle: .degrees(0), clockwise: true)
+        p.addLine(to: CGPoint(x: right, y: top + ear))
+        // Concave curve flowing smoothly back up into the top-right screen bezel
+        p.addQuadCurve(to: CGPoint(x: right + ear, y: top), control: CGPoint(x: right, y: top))
         p.closeSubpath()
         return p
     }
