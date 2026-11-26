@@ -25,6 +25,7 @@ final class DashboardViewModel: ObservableObject {
     let stats = SystemStatsMonitor()
     let gallery = GalleryService()
     let dock = DockWindowService()
+    let productivity = NotchProductivityService()
     private lazy var wallpaper = WallpaperColorService { [weak self] color in
         self?.wallpaperAccent = color.map(Color.init(nsColor:))
     }
@@ -97,6 +98,9 @@ final class DashboardViewModel: ObservableObject {
             .store(in: &subscriptions)
         store.$theme.map(\.showDock).removeDuplicates()
             .sink { [weak self] on in on ? self?.dock.start() : self?.dock.stop() }
+            .store(in: &subscriptions)
+        store.$theme.map(\.showNotch).removeDuplicates()
+            .sink { [weak self] on in on ? self?.productivity.start() : self?.productivity.stop() }
             .store(in: &subscriptions)
         nowPlaying.$track.map { $0?.isPlaying ?? false }.removeDuplicates()
             .sink { [weak self] in self?.nowPlayingActive = $0 }

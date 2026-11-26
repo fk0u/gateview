@@ -110,6 +110,15 @@ assert(cdTheme.countdowns.count == 1 && cdTheme.countdowns[0].symbol == "moon.st
 assert(cdTheme.autoHideFullscreen && cdTheme.language == "auto" && cdTheme.displayLanguage != "" && cdTheme.adhanVolume == 0.9)
 assert(cdTheme.showNotch && cdTheme.showDock)
 assert(DockWindowService.aspectFit(size: CGSize(width: 1920, height: 1080), maxSize: CGSize(width: 320, height: 200)) == CGSize(width: 320, height: 180))
+// Notch Productivity: Pomodoro, Clipboard, File Shelf
+assert(NotchProductivityService.formatTimer(1500) == "25:00" && NotchProductivityService.formatTimer(65) == "01:05")
+assert(NotchProductivityService.transform("  hello\n  world  ", .singleLine) == "hello world")
+assert(NotchProductivityService.transform("gateview", .uppercase) == "GATEVIEW")
+assert(NotchProductivityService.formatBytes(1536) == "1.5 KB" && NotchProductivityService.formatBytes(0) == "Folder")
+let clip1 = NotchProductivityService.insertClipboard("alpha", into: [])
+let clip2 = NotchProductivityService.insertClipboard("beta", into: clip1)
+let clip3 = NotchProductivityService.insertClipboard("alpha", into: clip2)
+assert(clip3.map(\.text) == ["alpha", "beta"])
 // uid churn doesn't affect equality (ThemeStore would otherwise rewrite theme.json forever)
 assert(Countdown(title: "a", date: "2027-03-10") == Countdown(title: "a", date: "2027-03-10"))
 

@@ -222,10 +222,25 @@ final class WindowManager: ObservableObject {
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         panel.contentView = FirstClickHostingView(
-            rootView: NotchView(viewModel: viewModel, nowPlaying: viewModel.nowPlaying, stats: viewModel.stats, windows: self, store: .shared)
+            rootView: NotchView(
+                viewModel: viewModel,
+                nowPlaying: viewModel.nowPlaying,
+                stats: viewModel.stats,
+                productivity: viewModel.productivity,
+                notesStore: .shared,
+                reminders: viewModel.remindersService,
+                windows: self,
+                store: .shared
+            )
         )
         notchWindow = panel
         layoutNotch()
+    }
+
+    func focusNotchForTyping() {
+        guard let panel = notchWindow, panel.isVisible else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKey()
     }
 
     func layoutNotch() {
@@ -237,8 +252,8 @@ final class WindowManager: ObservableObject {
         let screens = NSScreen.screens
         guard let screen = screens.indices.contains(store.theme.displayIndex) ? screens[store.theme.displayIndex] : NSScreen.main else { return }
         let isExpanded = expanded == "notch"
-        let width: CGFloat = isExpanded ? 448 : 288
-        let height: CGFloat = isExpanded ? 248 : 36
+        let width: CGFloat = isExpanded ? 560 : 320
+        let height: CGFloat = isExpanded ? 336 : 38
         let frame = NSRect(
             x: round(screen.frame.midX - width / 2),
             y: screen.frame.maxY - height,
@@ -247,6 +262,10 @@ final class WindowManager: ObservableObject {
         )
         panel.setFrame(frame, display: true)
         panel.orderFrontRegardless()
+        if !isExpanded && panel.isKeyWindow {
+            panel.resignKey()
+            NSApp.deactivate()
+        }
     }
 
     // MARK: Floating Dock Window Preview Panel (above real macOS Bottom Dock)
