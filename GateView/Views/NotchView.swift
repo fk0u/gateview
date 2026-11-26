@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// Top-edge hardware-style Notch (flush with y = 0, flat top, concave outer ears — NOT a floating Dynamic Island).
+/// Top-edge hardware-style Notch (sticky in front of all windows, flush with y = 0 — NOT a floating Dynamic Island).
 struct NotchView: View {
     @ObservedObject var viewModel: DashboardViewModel
     @ObservedObject var nowPlaying: NowPlayingService
     @ObservedObject var stats: SystemStatsMonitor
     @ObservedObject var windows: WindowManager
-    let theme: Theme
+    @ObservedObject var store: ThemeStore
 
     private var expanded: Bool { windows.expanded == "notch" }
+    private var theme: Theme { store.theme }
 
     var body: some View {
         let lang = theme.displayLanguage
@@ -27,18 +28,20 @@ struct NotchView: View {
         .clipShape(NotchShape(bottomRadius: expanded ? 24 : 18))
         .overlay(
             NotchShape(bottomRadius: expanded ? 24 : 18)
-                .strokeBorder(.white.opacity(0.11), lineWidth: 1)
+                .strokeBorder(.white.opacity(0.14), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.55), radius: 20, y: 8)
+        .shadow(color: .black.opacity(0.55), radius: 14, y: 6)
         .contentShape(Rectangle())
         .onTapGesture {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                 windows.expanded = expanded ? nil : "notch"
             }
         }
-        .background(GeometryReader { geo in
-            Color.clear.preference(key: HitRegionsKey.self, value: ["notch": geo.frame(in: .global)])
-        })
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .foregroundStyle(.white)
+        .tint(theme.accentColor)
+        .fontDesign(theme.fontDesign)
+        .environment(\.colorScheme, .dark)
     }
 
     private func compactBody(now: Date, phase: PrayerPhase?, lang: String) -> some View {

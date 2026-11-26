@@ -51,18 +51,7 @@ struct DashboardView: View {
             .opacity(appeared ? 1 : 0)
             .offset(y: appeared || !motion ? 0 : 24)
             .padding(.horizontal, 72)
-            .padding(.bottom, (theme.showDock ? 96 : 56) + windows.dockInset)
-
-            if theme.showNotch {
-                NotchView(viewModel: viewModel, nowPlaying: viewModel.nowPlaying, stats: viewModel.stats, windows: windows, theme: theme)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            }
-
-            if theme.showDock {
-                DockView(dock: viewModel.dock, windows: windows, theme: theme)
-                    .padding(.bottom, 14 + windows.dockInset)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            }
+            .padding(.bottom, 56 + windows.dockInset)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .foregroundStyle(.white)

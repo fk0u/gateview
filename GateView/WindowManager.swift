@@ -19,6 +19,7 @@ final class WindowManager: ObservableObject {
         didSet {
             updateMouse()
             updateKeyFocus()
+            layoutNotch()
         }
     }
 
@@ -27,12 +28,18 @@ final class WindowManager: ObservableObject {
     }
 
     private var window: DesktopWindow?
+    private var notchWindow: DesktopWindow?
+    private var dockPreviewWindow: DesktopWindow?
+    private weak var viewModel: DashboardViewModel?
     private var observers: [NSObjectProtocol] = []
     private var monitors: [Any] = []
     private var subscriptions: Set<AnyCancellable> = []
     private let store = ThemeStore.shared
+    private var lastDockProbe: TimeInterval = 0
+    private var dockHideTask: Task<Void, Never>?
 
     func show(viewModel: DashboardViewModel) {
+        self.viewModel = viewModel
         let window = DesktopWindow(
             contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
@@ -58,6 +65,9 @@ final class WindowManager: ObservableObject {
         layout()
         window.orderFrontRegardless()
 
+        setupNotchWindow(viewModel: viewModel)
+        setupDockPreviewWindow(viewModel: viewModel)
+
         let center = NotificationCenter.default
         observers = [
             // Follow resolution / display / Dock changes.
@@ -79,6 +89,12 @@ final class WindowManager: ObservableObject {
         store.$theme.map(\.autoHideFullscreen).removeDuplicates().dropFirst()
             .sink { [weak self] _ in self?.updateSuppression() }
             .store(in: &subscriptions)
+        store.$theme.map(\.showNotch).removeDuplicates()
+            .sink { [weak self] _ in self?.layoutNotch() }
+            .store(in: &subscriptions)
+        store.$theme.map(\.showDock).removeDuplicates()
+            .sink { [weak self] on in if !on { self?.hideDockPreview() } }
+            .store(in: &subscriptions)
 
         // Fullscreen apps switch without NSWindow notifications of our own, so watch app activation.
         let workspace = NSWorkspace.shared.notificationCenter
@@ -91,9 +107,21 @@ final class WindowManager: ObservableObject {
         updateSuppression()
 
         // Event-driven hover tracking; mouse monitors need no Accessibility permission.
-        let move: (NSEvent) -> Void = { [weak self] _ in self?.updateMouse() }
+        let move: (NSEvent) -> Void = { [weak self] _ in
+            self?.updateMouse()
+            self?.probeRealDock()
+        }
         let click: (NSEvent) -> Void = { [weak self] _ in
-            guard let self, self.expanded != nil, self.region(at: NSEvent.mouseLocation) == nil else { return }
+            guard let self else { return }
+            let pt = NSEvent.mouseLocation
+            if self.expanded == "notch", let nf = self.notchWindow?.frame, !nf.contains(pt) {
+                self.expanded = nil
+                return
+            }
+            if let dp = self.dockPreviewWindow, dp.isVisible, !dp.frame.contains(pt) {
+                self.hideDockPreview()
+            }
+            guard self.expanded != nil, self.region(at: pt) == nil else { return }
             self.expanded = nil // click outside closes the detail card
         }
         monitors = [
@@ -134,6 +162,8 @@ final class WindowManager: ObservableObject {
                 window.animator().alphaValue = hidden ? 0 : 1
             }
         }
+        layoutNotch()
+        if hidden { hideDockPreview() }
         updateMouse()
     }
 
@@ -165,6 +195,138 @@ final class WindowManager: ObservableObject {
         else { return }
         window?.setFrame(screen.frame, display: true)
         dockInset = screen.visibleFrame.minY - screen.frame.minY
+        layoutNotch()
+    }
+
+    // MARK: Sticky Top-Edge Notch Panel (always in front of all windows)
+
+    private func setupNotchWindow(viewModel: DashboardViewModel) {
+        let panel = DesktopWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 32),
+            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        panel.hidesOnDeactivate = false
+        panel.becomesKeyOnlyIfNeeded = true
+        // Above the menu bar and every regular app window — sticky at the very top front.
+        panel.level = NSWindow.Level(Int(CGWindowLevelForKey(.mainMenuWindow)) + 1)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        panel.isReleasedWhenClosed = false
+        panel.contentView = FirstClickHostingView(
+            rootView: NotchView(viewModel: viewModel, nowPlaying: viewModel.nowPlaying, stats: viewModel.stats, windows: self, store: .shared)
+        )
+        notchWindow = panel
+        layoutNotch()
+    }
+
+    func layoutNotch() {
+        guard let panel = notchWindow else { return }
+        guard store.theme.showNotch && !overlaySuppressed else {
+            panel.orderOut(nil)
+            return
+        }
+        let screens = NSScreen.screens
+        guard let screen = screens.indices.contains(store.theme.displayIndex) ? screens[store.theme.displayIndex] : NSScreen.main else { return }
+        let isExpanded = expanded == "notch"
+        let width: CGFloat = isExpanded ? 448 : 288
+        let height: CGFloat = isExpanded ? 248 : 36
+        let frame = NSRect(
+            x: round(screen.frame.midX - width / 2),
+            y: screen.frame.maxY - height,
+            width: width,
+            height: height
+        )
+        panel.setFrame(frame, display: true)
+        panel.orderFrontRegardless()
+    }
+
+    // MARK: Floating Dock Window Preview Panel (above real macOS Bottom Dock)
+
+    private func setupDockPreviewWindow(viewModel: DashboardViewModel) {
+        let panel = DesktopWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 210),
+            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        panel.hidesOnDeactivate = false
+        panel.becomesKeyOnlyIfNeeded = true
+        panel.level = .popUpMenu
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        panel.isReleasedWhenClosed = false
+        panel.contentView = FirstClickHostingView(
+            rootView: DockView(dock: viewModel.dock, dismiss: { [weak self] in self?.hideDockPreview() })
+        )
+        dockPreviewWindow = panel
+    }
+
+    private func probeRealDock() {
+        guard store.theme.showDock, !overlaySuppressed, let viewModel else { return }
+        let pt = NSEvent.mouseLocation
+        // Keep preview open while cursor is inside the preview panel itself.
+        if let panel = dockPreviewWindow, panel.isVisible, panel.frame.contains(pt) {
+            dockHideTask?.cancel()
+            return
+        }
+        let now = Date().timeIntervalSinceReferenceDate
+        guard now - lastDockProbe >= 0.06 else { return }
+        lastDockProbe = now
+
+        if let target = viewModel.dock.dockItem(at: pt) {
+            dockHideTask?.cancel()
+            if viewModel.dock.hoveredTarget?.app.pid != target.app.pid {
+                viewModel.dock.hoveredTarget = target
+                for win in target.app.windows.prefix(4) {
+                    viewModel.dock.loadPreview(for: win)
+                }
+            }
+            positionDockPreview(for: target)
+        } else if dockPreviewWindow?.isVisible == true {
+            scheduleHideDockPreview()
+        }
+    }
+
+    private func positionDockPreview(for target: DockHoveredTarget) {
+        guard let panel = dockPreviewWindow else { return }
+        let count = max(1, min(target.app.windows.count, 3))
+        let width: CGFloat = target.app.windows.isEmpty ? 286 : CGFloat(count) * 234 + 34
+        let height: CGFloat = target.app.windows.isEmpty ? 132 : 216
+        let screen = NSScreen.screens.first { $0.frame.contains(target.iconFrame.origin) } ?? NSScreen.main
+        let sf = screen?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+
+        var x = round(target.iconFrame.midX - width / 2)
+        x = min(max(x, sf.minX + 12), sf.maxX - width - 12)
+        var y = target.iconFrame.maxY + 10
+        if y + height > sf.maxY - 40 {
+            y = sf.minY + 90
+        }
+        panel.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
+        panel.orderFrontRegardless()
+    }
+
+    private func scheduleHideDockPreview() {
+        dockHideTask?.cancel()
+        dockHideTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 260_000_000)
+            guard !Task.isCancelled, let self else { return }
+            let pt = NSEvent.mouseLocation
+            if let panel = self.dockPreviewWindow, panel.isVisible, panel.frame.contains(pt) { return }
+            if self.viewModel?.dock.dockItem(at: pt) != nil { return }
+            self.hideDockPreview()
+        }
+    }
+
+    func hideDockPreview() {
+        dockHideTask?.cancel()
+        dockPreviewWindow?.orderOut(nil)
+        viewModel?.dock.hoveredTarget = nil
     }
 }
 

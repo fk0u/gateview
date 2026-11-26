@@ -1,3 +1,4 @@
+import ApplicationServices
 import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
@@ -196,8 +197,21 @@ private struct WidgetsSection: View {
         SwiftUI.Section("Left side & Overlays") {
             Toggle("Weather", isOn: $store.theme.showWeather)
             Toggle("System stats", isOn: $store.theme.showStats)
-            Toggle("Top-edge Notch", isOn: $store.theme.showNotch)
-            Toggle("Interactive Dock & Window Preview", isOn: $store.theme.showDock)
+            Toggle("Top-edge Notch (sticky front)", isOn: $store.theme.showNotch)
+            Toggle("macOS Dock Window Preview", isOn: $store.theme.showDock)
+            if store.theme.showDock {
+                HStack(spacing: 10) {
+                    Button("Accessibility Permission…") {
+                        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+                        _ = AXIsProcessTrustedWithOptions(opts)
+                    }
+                    Button("Screen Recording (Live Thumbnails)…") {
+                        _ = CGRequestScreenCaptureAccess()
+                    }
+                }
+                Text("Hover icons on the macOS Dock to preview, close, minimize, or quit windows. Accessibility is needed to read hovered Dock icons; Screen Recording enables live window thumbnails.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         SwiftUI.Section {
             List {
