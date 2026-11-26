@@ -60,8 +60,7 @@ struct DockView: View {
             .padding(.horizontal, 12)
             .padding(.top, 8)
             .padding(.bottom, 10)
-            .background(Color.black.opacity(0.45))
-            .background(.ultraThinMaterial)
+            .background(Color.black.opacity(0.62))
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -199,8 +198,7 @@ struct DockView: View {
             }
         }
         .padding(12)
-        .background(Color.black.opacity(0.76))
-        .background(.ultraThinMaterial)
+        .background(Color.black.opacity(0.84))
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)

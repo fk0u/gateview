@@ -12,33 +12,33 @@ struct NotchView: View {
 
     var body: some View {
         let lang = theme.displayLanguage
-        TimelineView(.periodic(from: .now, by: 1)) { ctx in
-            let phase = PrayerTimeService.phase(at: ctx.date, in: viewModel.prayers)
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                let phase = PrayerTimeService.phase(at: ctx.date, in: viewModel.prayers)
                 if expanded {
                     expandedBody(now: ctx.date, phase: phase, lang: lang)
                 } else {
                     compactBody(now: ctx.date, phase: phase, lang: lang)
                 }
             }
-            .frame(width: expanded ? 440 : 280)
-            .background(Color(red: 0.024, green: 0.031, blue: 0.051))
-            .clipShape(NotchShape(bottomRadius: expanded ? 24 : 18))
-            .overlay(
-                NotchShape(bottomRadius: expanded ? 24 : 18)
-                    .strokeBorder(.white.opacity(0.11), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.55), radius: 20, y: 8)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
-                    windows.expanded = expanded ? nil : "notch"
-                }
-            }
-            .background(GeometryReader { geo in
-                Color.clear.preference(key: HitRegionsKey.self, value: ["notch": geo.frame(in: .global)])
-            })
         }
+        .frame(width: expanded ? 440 : 280)
+        .background(Color(red: 0.024, green: 0.031, blue: 0.051))
+        .clipShape(NotchShape(bottomRadius: expanded ? 24 : 18))
+        .overlay(
+            NotchShape(bottomRadius: expanded ? 24 : 18)
+                .strokeBorder(.white.opacity(0.11), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.55), radius: 20, y: 8)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                windows.expanded = expanded ? nil : "notch"
+            }
+        }
+        .background(GeometryReader { geo in
+            Color.clear.preference(key: HitRegionsKey.self, value: ["notch": geo.frame(in: .global)])
+        })
     }
 
     private func compactBody(now: Date, phase: PrayerPhase?, lang: String) -> some View {
