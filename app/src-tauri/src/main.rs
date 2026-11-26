@@ -135,6 +135,31 @@ fn save_notes(notes: tauri::State<'_, Notes>, path: tauri::State<'_, ConfigPaths
     let _ = std::fs::write(&path.notes, text);
 }
 
+#[tauri::command]
+fn list_dock_windows() -> Vec<gateview_providers::dock::DockWindow> {
+    gateview_providers::dock::list_windows()
+}
+
+#[tauri::command]
+fn get_window_preview(hwnd: isize) -> Option<String> {
+    gateview_providers::dock::capture_preview_data_url(hwnd)
+}
+
+#[tauri::command]
+fn focus_window(hwnd: isize) {
+    gateview_providers::dock::focus_window(hwnd);
+}
+
+#[tauri::command]
+fn minimize_window(hwnd: isize) {
+    gateview_providers::dock::minimize_window(hwnd);
+}
+
+#[tauri::command]
+fn close_window(hwnd: isize) {
+    gateview_providers::dock::close_window(hwnd);
+}
+
 struct ConfigPaths {
     notes: PathBuf,
 }
@@ -220,6 +245,21 @@ fn stats_loop(app: AppHandle) {
         *app.state::<State>().stats.lock().unwrap() = Some(sample.clone());
         let _ = app.emit("stats", &sample);
         std::thread::sleep(Duration::from_secs(2));
+    }
+}
+
+fn dock_loop(app: AppHandle) {
+    let mut last = Vec::new();
+    loop {
+        let show = app.state::<State>().theme.lock().unwrap().show_dock;
+        if show {
+            let windows = gateview_providers::dock::list_windows();
+            if windows != last {
+                last = windows.clone();
+                let _ = app.emit("dock", &windows);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(1500));
     }
 }
 
@@ -330,7 +370,7 @@ fn overlay_loop(app: AppHandle) {
             match gateview_providers::win32::cursor_pos().zip(win.outer_position().ok()) {
                 Some(((cx, cy), pos)) => {
                     let (lx, ly) = (cx - pos.x, cy - pos.y);
-                    state.regions.lock().unwrap().values().any(|[x, y, w, h]| {
+                    !state.regions.lock().unwrap().values().any(|[x, y, w, h]| {
                         lx >= *x && lx < *x + *w && ly >= *y && ly < *y + *h
                     })
                 }
@@ -376,7 +416,16 @@ fn overlay_loop(app: AppHandle) {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
-        .invoke_handler(tauri::generate_handler![get_state, set_hit_regions, save_notes])
+        .invoke_handler(tauri::generate_handler![
+            get_state,
+            set_hit_regions,
+            save_notes,
+            list_dock_windows,
+            get_window_preview,
+            focus_window,
+            minimize_window,
+            close_window
+        ])
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
             std::fs::create_dir_all(&config_dir).ok();
@@ -419,6 +468,9 @@ fn main() {
 
             let handle = app.handle().clone();
             std::thread::spawn(move || stats_loop(handle));
+
+            let handle = app.handle().clone();
+            std::thread::spawn(move || dock_loop(handle));
 
             let (tx, rx) = mpsc::channel();
             #[cfg(windows)]

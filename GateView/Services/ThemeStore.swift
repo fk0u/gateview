@@ -19,6 +19,8 @@ struct Theme: Codable, Equatable {
     // Widgets
     var showWeather = true
     var showStats = true
+    var showNotch = true
+    var showDock = true
     var widgetOrder = ["prayer", "agenda", "nowPlaying"] // glass panel: what's listed is shown, in this order
     var interactive = true        // hover + click widgets for details
     var displayIndex = 0          // 0 = main screen

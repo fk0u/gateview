@@ -63,8 +63,10 @@ final class WallpaperColorService {
                                   space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return nil }
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
-        let pixels = stride(from: 0, to: data.count, by: 4).map {
-            (Double(data[$0]) / 255, Double(data[$0 + 1]) / 255, Double(data[$0 + 2]) / 255)
+        var pixels: [(Double, Double, Double)] = []
+        pixels.reserveCapacity(data.count / 4)
+        for i in stride(from: 0, to: data.count, by: 4) {
+            pixels.append((Double(data[i]) / 255.0, Double(data[i + 1]) / 255.0, Double(data[i + 2]) / 255.0))
         }
         return dominant(pixels).map { NSColor(hue: $0.h, saturation: $0.s, brightness: $0.b, alpha: 1) }
     }

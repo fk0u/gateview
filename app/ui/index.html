@@ -8,6 +8,7 @@
 </head>
 <body>
   <div id="scrim"></div>
+  <header id="notch" data-hit="notch" class="notch hidden" aria-label="GateView Notch"></header>
   <main id="dashboard">
     <section class="left">
       <div id="greeting" class="greeting"></div>
@@ -26,6 +27,10 @@
     </section>
     <aside id="panel" class="panel glass" hidden></aside>
   </main>
+  <div id="dock-wrap" class="dock-wrap hidden">
+    <div id="dock-preview" data-hit="dock-preview" class="dock-preview glass hidden"></div>
+    <nav id="dock" data-hit="dock" class="dock glass" aria-label="GateView Dock"></nav>
+  </div>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

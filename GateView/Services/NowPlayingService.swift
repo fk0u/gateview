@@ -130,14 +130,14 @@ final class NowPlayingService: ObservableObject {
                 let album = info?["kMRMediaRemoteNowPlayingInfoAlbum"] as? String ?? ""
                 // Browsers post info changes often; only decode artwork when the song changes.
                 let same = self.track.map { $0.title == title && $0.artist == artist && $0.artwork != nil } ?? false
-                let artwork = same ? nil : (info?["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data).flatMap(Self.thumbnail)
+                let artwork = same ? self.track?.artwork : (info?["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data).flatMap(Self.thumbnail)
                 let duration = info?["kMRMediaRemoteNowPlayingInfoDuration"] as? Double ?? 0
                 let elapsed = info?["kMRMediaRemoteNowPlayingInfoElapsedTime"] as? Double ?? 0
                 let timestamp = info?["kMRMediaRemoteNowPlayingInfoTimestamp"] as? Date ?? Date()
                 let rate = info?["kMRMediaRemoteNowPlayingInfoPlaybackRate"] as? Double ?? (playing ? 1 : 0)
                 Task { @MainActor in
                     let next = title.isEmpty ? nil
-                        : NowPlaying(title: title, artist: artist, album: album, artwork: artwork ?? self.track?.artwork, isPlaying: playing,
+                        : NowPlaying(title: title, artist: artist, album: album, artwork: artwork, isPlaying: playing,
                                      duration: duration, elapsed: elapsed, timestamp: timestamp, rate: rate)
                     // Animate here: the slide in/out of the widget follows this change.
                     let animate = ThemeStore.shared.theme.motion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion

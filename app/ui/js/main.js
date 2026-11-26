@@ -33,6 +33,11 @@ const WIDGET_NAMES = {
 let state = null;         // last Payload
 let remindersOpen = false;
 let notesOpen = false;
+let notchOpen = false;
+let dockWindows = [];
+let hoveredHwnd = null;
+let previewCache = new Map();
+let previewHideTimer = null;
 
 function lang() {
   const mode = state?.theme?.language ?? "auto";
@@ -83,8 +88,9 @@ function render() {
   if (!state) return;
   const theme = state.theme;
   document.documentElement.style.setProperty("--accent", theme.accent || "#ffc56b");
-  document.getElementById("dashboard").style.flexDirection =
-    theme.panelSide === "left" ? "row-reverse" : "row";
+  const dash = document.getElementById("dashboard");
+  dash.style.flexDirection = theme.panelSide === "left" ? "row-reverse" : "row";
+  dash.classList.toggle("with-dock", theme.showDock !== false);
 
   // Weather chip
   const chip = document.getElementById("weather-chip");
@@ -96,9 +102,218 @@ function render() {
     chip.classList.add("hidden");
   }
 
+  renderNotch();
+  renderDock();
   renderPanel();
   pushHitRegions();
 }
+
+function renderNotch() {
+  const el = document.getElementById("notch");
+  if (!el) return;
+  const enabled = state?.theme?.showNotch !== false;
+  el.classList.toggle("hidden", !enabled);
+  el.classList.toggle("expanded", enabled && notchOpen);
+  if (!enabled) return;
+
+  const ph = state?.phase;
+  const np = state?.now_playing;
+  const w = state?.weather;
+  const stats = state?.stats;
+
+  if (!notchOpen) {
+    const leftHtml = ph
+      ? `<span class="notch-label">${esc(ph.name)}</span><span class="notch-accent">${esc(ph.remaining || t("ongoing"))}</span>`
+      : `<span class="notch-label">${esc(state?.theme?.city ?? "GateView")}</span>`;
+    let rightHtml = "";
+    if (np && np.is_playing) {
+      rightHtml = `<span class="notch-eq"><span></span><span></span><span></span></span><span class="notch-label">${esc(np.title)}</span>`;
+    } else if (w) {
+      rightHtml = `<span class="notch-accent">${w.temperature}°</span><span class="notch-label">${esc(w.label)}</span>`;
+    } else if (stats) {
+      rightHtml = `<span class="notch-label">CPU</span><span class="notch-accent">${Math.round(stats.cpu)}%</span>`;
+    }
+    el.innerHTML = `
+      <div class="notch-compact">
+        <div class="notch-side left">${leftHtml}</div>
+        <span class="notch-cam" aria-hidden="true"></span>
+        <div class="notch-side right">${rightHtml}</div>
+      </div>`;
+    return;
+  }
+
+  const prayers = state?.prayers ?? [];
+  const prayerGrid = prayers.map((p) => {
+    const active = ph?.name === p.name ? " active" : "";
+    return `<div class="item${active}"><span>${esc(p.name)}</span><b>${esc(p.time)}</b></div>`;
+  }).join("");
+
+  const npCard = np
+    ? `<div class="notch-card">
+        <div class="row"><span class="np-title">${esc(np.title)}</span><span class="notch-pill">${esc(np.source || t("nowPlaying"))}</span></div>
+        <div class="np-artist">${esc(np.artist)}</div>
+        ${np.duration > 0 ? `<div class="np-bar"><div class="np-fill" id="notch-np-fill" style="width:0%"></div></div>
+        <div class="np-times"><span id="notch-np-pos">0:00</span><span id="notch-np-dur">0:00</span></div>` : ""}
+      </div>`
+    : "";
+
+  const metaParts = [];
+  if (w) metaParts.push(`${w.temperature}° ${esc(w.label)}`);
+  if (stats) metaParts.push(`CPU ${Math.round(stats.cpu)}% · RAM ${Math.round(stats.ram_percent)}%`);
+
+  el.innerHTML = `
+    <div class="notch-drawer">
+      <div class="notch-head">
+        <span>${esc(state?.theme?.city ?? "GateView")}</span>
+        <span class="notch-cam" aria-hidden="true"></span>
+        <span>${metaParts.join(" · ") || "GateView"}</span>
+      </div>
+      ${npCard}
+      ${prayers.length ? `<div class="notch-card">
+        <div class="row" style="font-size:12px">
+          <b>${esc(ph?.name ?? t("prayerTimes"))}</b>
+          <span class="notch-accent">${esc(ph ? (ph.kind === "ongoing" ? t("ongoing") : `${ph.kind === "iqamah" ? t("iqomahIn") : t("adzanIn")} ${ph.remaining}`) : "")}</span>
+        </div>
+        <div class="notch-prayers">${prayerGrid}</div>
+      </div>` : ""}
+    </div>`;
+}
+
+// MARK: Immersive macOS-style Dock + Live Window Preview
+
+const DOCK_PALETTE = ["#4A8FE7", "#E67E5A", "#5AC8FA", "#AF52DE", "#34C759", "#FF9F0A"];
+function dockBadgeStyle(title) {
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) hash = (hash * 31 + title.charCodeAt(i)) | 0;
+  const color = DOCK_PALETTE[Math.abs(hash) % DOCK_PALETTE.length];
+  return `background: linear-gradient(145deg, ${color}55, ${color}22);`;
+}
+
+function renderDock() {
+  const wrap = document.getElementById("dock-wrap");
+  const dock = document.getElementById("dock");
+  if (!wrap || !dock) return;
+  const enabled = state?.theme?.showDock !== false;
+  wrap.classList.toggle("hidden", !enabled);
+  if (!enabled) return;
+
+  const appsHtml = dockWindows.slice(0, 12).map((w) => {
+    const letter = esc((w.title.trim()[0] || "?").toUpperCase());
+    const cls = `dock-item${w.is_active ? " active" : ""}${w.is_minimized ? " minimized" : ""}`;
+    return `<button class="${cls}" data-hwnd="${w.hwnd}" style="${dockBadgeStyle(w.title)}" title="${esc(w.title)}">
+      <span>${letter}</span><span class="dock-dot"></span>
+    </button>`;
+  }).join("");
+
+  const sep = dockWindows.length ? `<span class="dock-sep"></span>` : "";
+  const notchLabel = lang() === "id" ? "Buka/Tutup Notch" : "Toggle Notch";
+  const notesLabel = t("notes");
+  dock.innerHTML = `${appsHtml}${sep}
+    <button class="dock-item${notchOpen ? " active" : ""}" data-dock-action="notch" title="${notchLabel}">⌃</button>
+    <button class="dock-item${notesOpen ? " active" : ""}" data-dock-action="notes" title="${notesLabel}">✎</button>`;
+
+  dock.querySelectorAll("[data-hwnd]").forEach((btn) => {
+    const hwnd = Number(btn.dataset.hwnd);
+    btn.addEventListener("mouseenter", () => showWindowPreview(hwnd));
+    btn.addEventListener("mouseleave", scheduleHidePreview);
+    btn.addEventListener("click", () => invoke("focus_window", { hwnd }));
+  });
+  dock.querySelector('[data-dock-action="notch"]')?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    notchOpen = !notchOpen;
+    renderNotch();
+    renderDock();
+    pushHitRegions();
+  });
+  dock.querySelector('[data-dock-action="notes"]')?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    notesOpen = !notesOpen;
+    renderPanel();
+    renderDock();
+    pushHitRegions();
+  });
+}
+
+function bindDockMagnification() {
+  const dock = document.getElementById("dock");
+  if (!dock) return;
+  dock.addEventListener("mousemove", (e) => {
+    const items = dock.querySelectorAll(".dock-item");
+    items.forEach((item) => {
+      const r = item.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const dist = Math.abs(e.clientX - cx);
+      const scale = Math.max(1, 1.52 - Math.min(dist, 120) / 120 * 0.52);
+      const lift = (scale - 1) * 18;
+      item.style.transform = `translateY(${-lift.toFixed(1)}px) scale(${scale.toFixed(3)})`;
+    });
+  });
+  dock.addEventListener("mouseleave", () => {
+    dock.querySelectorAll(".dock-item").forEach((item) => { item.style.transform = ""; });
+  });
+}
+bindDockMagnification();
+
+async function showWindowPreview(hwnd) {
+  clearTimeout(previewHideTimer);
+  hoveredHwnd = hwnd;
+  const win = dockWindows.find((w) => w.hwnd === hwnd);
+  const box = document.getElementById("dock-preview");
+  if (!win || !box) return;
+  box.classList.remove("hidden");
+  const cached = previewCache.get(hwnd);
+  renderPreviewBox(box, win, cached);
+  pushHitRegions();
+
+  const fresh = await invoke("get_window_preview", { hwnd }).catch(() => null);
+  if (fresh) previewCache.set(hwnd, fresh);
+  if (hoveredHwnd === hwnd) {
+    renderPreviewBox(box, win, fresh ?? cached);
+    pushHitRegions();
+  }
+}
+
+function renderPreviewBox(box, win, imgUrl) {
+  const thumb = imgUrl
+    ? `<img src="${imgUrl}" alt="${esc(win.title)}" />`
+    : `<span>${win.is_minimized ? (lang() === "id" ? "Minimized" : "Minimized") : (lang() === "id" ? "Memuat pratinjau…" : "Loading preview…")}</span>`;
+  box.innerHTML = `
+    <div class="preview-head">
+      <span class="preview-title">${esc(win.title)}</span>
+      <div class="preview-actions">
+        <button class="preview-btn" data-act="min" title="Minimize">−</button>
+        <button class="preview-btn close" data-act="close" title="Close">×</button>
+      </div>
+    </div>
+    <div class="preview-thumb" data-act="focus">${thumb}</div>`;
+  box.querySelector('[data-act="focus"]')?.addEventListener("click", () => invoke("focus_window", { hwnd: win.hwnd }));
+  box.querySelector('[data-act="min"]')?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    invoke("minimize_window", { hwnd: win.hwnd });
+  });
+  box.querySelector('[data-act="close"]')?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    invoke("close_window", { hwnd: win.hwnd });
+    hideWindowPreview();
+  });
+}
+
+function scheduleHidePreview() {
+  clearTimeout(previewHideTimer);
+  previewHideTimer = setTimeout(hideWindowPreview, 180);
+}
+
+function hideWindowPreview() {
+  hoveredHwnd = null;
+  const box = document.getElementById("dock-preview");
+  if (box && !box.classList.contains("hidden")) {
+    box.classList.add("hidden");
+    pushHitRegions();
+  }
+}
+
+document.getElementById("dock-preview")?.addEventListener("mouseenter", () => clearTimeout(previewHideTimer));
+document.getElementById("dock-preview")?.addEventListener("mouseleave", scheduleHidePreview);
 
 function widgetHeader(key) {
   const [id, en] = WIDGET_NAMES[key] ?? [key, key];
@@ -195,12 +410,17 @@ function remindersBody() {
 function tickNowPlaying(now) {
   const np = state?.now_playing;
   if (!np || !(np.duration > 0)) return;
-  const fill = document.getElementById("np-fill");
-  if (!fill) return;
   const elapsed = np.elapsed + (np.is_playing ? (now.getTime() / 1000 - np.timestamp) * Math.max(np.rate, 1) : 0);
-  fill.style.width = `${Math.min(100, elapsed / np.duration * 100)}%`;
-  document.getElementById("np-pos").textContent = fmtTime(elapsed);
-  document.getElementById("np-dur").textContent = fmtTime(np.duration);
+  const pct = `${Math.min(100, elapsed / np.duration * 100)}%`;
+  const posText = fmtTime(elapsed);
+  const durText = fmtTime(np.duration);
+  for (const prefix of ["np", "notch-np"]) {
+    const fill = document.getElementById(`${prefix}-fill`);
+    if (!fill) continue;
+    fill.style.width = pct;
+    document.getElementById(`${prefix}-pos`).textContent = posText;
+    document.getElementById(`${prefix}-dur`).textContent = durText;
+  }
 }
 function fmtTime(s) {
   s = Math.max(0, Math.floor(s));
@@ -226,11 +446,28 @@ function bindNotes() {
 
 function bindReminders() { /* list-only in M1 */ }
 
+document.getElementById("notch")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (!notchOpen) {
+    notchOpen = true;
+    renderNotch();
+    pushHitRegions();
+  }
+});
+
 document.addEventListener("click", (e) => {
+  let changed = false;
   if (notesOpen && !e.target.closest('[data-hit="notes"]')) {
     notesOpen = false;
     renderPanel();
+    changed = true;
   }
+  if (notchOpen && !e.target.closest("#notch")) {
+    notchOpen = false;
+    renderNotch();
+    changed = true;
+  }
+  if (changed) pushHitRegions();
 });
 
 // MARK: Click-through hit regions (physical px relative to the window)
@@ -277,11 +514,19 @@ await listen("theme", (e) => {
 await listen("stats", (e) => {
   const s = e.payload;
   if (!s) return;
+  if (state) state.stats = s;
   document.getElementById("stats-chip").classList.remove("hidden");
   document.getElementById("cpu").textContent = `${Math.round(s.cpu)}%`;
   document.getElementById("ram").textContent = `${Math.round(s.ram_percent)}%`;
+  if (notchOpen) renderNotch();
+});
+await listen("dock", (e) => {
+  dockWindows = Array.isArray(e.payload) ? e.payload : [];
+  renderDock();
+  pushHitRegions();
 });
 
 state = await invoke("get_state");
+dockWindows = await invoke("list_dock_windows").catch(() => []);
 render();
 tickClock();

@@ -36,6 +36,8 @@ pub struct Theme {
     // Widgets
     pub show_weather: bool,
     pub show_stats: bool,
+    pub show_notch: bool,
+    pub show_dock: bool,
     pub widget_order: Vec<String>,
     pub interactive: bool,
     pub display_index: usize,
@@ -91,6 +93,8 @@ impl Default for Theme {
 
             show_weather: true,
             show_stats: true,
+            show_notch: true,
+            show_dock: true,
             widget_order: ["prayer", "agenda", "nowPlaying"].iter().map(|s| s.to_string()).collect(),
             interactive: true,
             display_index: 0,

@@ -1,6 +1,7 @@
 //! Platform service implementations for the Tauri shells (Windows, later Linux).
 //! Windows-specific code is `cfg(windows)`; stubs keep other targets compiling.
 
+pub mod dock;
 pub mod stats;
 
 #[cfg(windows)]

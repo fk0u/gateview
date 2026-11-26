@@ -6,8 +6,8 @@
 # on every release so users can also install it from a local tap:
 #   brew tap-new <user>/gateview && brew tap <user>/gateview && brew install --cask gateview
 cask "gateview" do
-  version "2.3.0"
-  sha256 "c8ee6c0c8de0a89402aa1049a73697f91fdfdc647ddffcb05ed70e9cd8fc5e5b"
+  version "2.3.1"
+  sha256 "9152a6932dd172e4ca96707750f4b5a318aca4da5f0ea96f0a31b95d8c19119d"
 
   url "https://github.com/fk0u/gateview/releases/download/v#{version}/GateView-#{version}-universal.dmg"
   name "GateView"
