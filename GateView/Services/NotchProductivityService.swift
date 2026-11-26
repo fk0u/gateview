@@ -30,6 +30,25 @@ struct QuickBookmark: Identifiable, Codable, Equatable {
     var symbol: String
 }
 
+struct QuickTodo: Identifiable, Codable, Equatable {
+    var id = UUID()
+    var title: String
+    var done: Bool = false
+}
+
+struct LrcLine: Identifiable, Equatable {
+    let time: Double
+    let text: String
+    var id: Double { time }
+}
+
+struct NotchToast: Equatable {
+    let symbol: String
+    let title: String
+    let detail: String
+    let tintHex: String
+}
+
 /// Powers the multi-section Notch Command Center:
 /// 1) Deep-Work Pomodoro Timer
 /// 2) Clipboard History Manager (with Pin, Search, Text Transforms)
@@ -61,6 +80,26 @@ final class NotchProductivityService: ObservableObject {
     @Published private(set) var isFocusRunning = false
     @Published private(set) var completedSessionsToday = 0
 
+    // MARK: Live Activity Toast (Charging, Caps Lock, Water, Clipboard)
+    @Published private(set) var activeToast: NotchToast?
+    private var toastTask: Task<Void, Never>?
+
+    // MARK: Synced Lyrics (LRCLIB, free & keyless)
+    @Published private(set) var lyrics: [LrcLine] = []
+    @Published private(set) var lyricsLoading = false
+    @Published private(set) var lyricsTrackKey = ""
+    private var lyricsCache: [String: [LrcLine]] = [:]
+
+    // MARK: Water Hydration Tracker
+    @Published var waterGoalML: Int = 2000 { didSet { saveWater() } }
+    @Published var waterCupML: Int = 250 { didSet { saveWater() } }
+    @Published private(set) var waterTodayML: Int = 0
+    @Published private(set) var waterHourly: [Int: Int] = [:]
+    private var waterDayKey: String = ""
+
+    // MARK: Local To-Do List
+    @Published var todos: [QuickTodo] = [] { didSet { saveTodos() } }
+
     // MARK: Clipboard History
     @Published private(set) var clipboard: [ClipboardEntry] = []
     private var lastChangeCount = NSPasteboard.general.changeCount
@@ -77,9 +116,13 @@ final class NotchProductivityService: ObservableObject {
     private var focusTask: Task<Void, Never>?
     private var clipTask: Task<Void, Never>?
     private let bookmarksKey = "GateView.quickBookmarks"
+    private let todosKey = "GateView.quickTodos"
+    private let waterKey = "GateView.waterState"
 
     init() {
         loadBookmarks()
+        loadTodos()
+        loadWater()
     }
 
     func start() {
@@ -319,5 +362,177 @@ final class NotchProductivityService: ObservableObject {
 
     func openBookmark(_ b: QuickBookmark) {
         if let url = URL(string: b.url) { NSWorkspace.shared.open(url) }
+    }
+
+    // MARK: - Live Activity Toast
+
+    func showToast(symbol: String, title: String, detail: String = "", tintHex: String = "#FFC56B", duration: Double = 3.0) {
+        toastTask?.cancel()
+        activeToast = NotchToast(symbol: symbol, title: title, detail: detail, tintHex: tintHex)
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.activeToast = nil
+        }
+    }
+
+    // MARK: - Synced Lyrics (LRCLIB)
+
+    func loadLyrics(title: String, artist: String) async {
+        let key = "\(title)|\(artist)"
+        guard !title.isEmpty, key != lyricsTrackKey else { return }
+        lyricsTrackKey = key
+        if let cached = lyricsCache[key] {
+            lyrics = cached
+            return
+        }
+        lyrics = []
+        lyricsLoading = true
+        defer { lyricsLoading = false }
+
+        var comps = URLComponents(string: "https://lrclib.net/api/get")
+        comps?.queryItems = [
+            URLQueryItem(name: "track_name", value: title),
+            URLQueryItem(name: "artist_name", value: artist),
+        ]
+        guard let url = comps?.url,
+              let (data, resp) = try? await URLSession.shared.data(from: url),
+              (resp as? HTTPURLResponse)?.statusCode == 200
+        else { return }
+
+        struct LrcResponse: Decodable { let syncedLyrics: String?; let plainLyrics: String? }
+        guard let decoded = try? JSONDecoder().decode(LrcResponse.self, from: data) else { return }
+        let parsed: [LrcLine]
+        if let synced = decoded.syncedLyrics, !synced.isEmpty {
+            parsed = Self.parseLRC(synced)
+        } else if let plain = decoded.plainLyrics, !plain.isEmpty {
+            parsed = plain.split(separator: "\n").enumerated().map { LrcLine(time: Double($0.offset) * -1 - 1, text: String($0.element)) }
+        } else {
+            parsed = []
+        }
+        if lyricsTrackKey == key {
+            lyrics = parsed
+            lyricsCache[key] = parsed
+        }
+    }
+
+    nonisolated static func parseLRC(_ raw: String) -> [LrcLine] {
+        var out: [LrcLine] = []
+        for line in raw.split(separator: "\n") {
+            let s = String(line)
+            guard s.hasPrefix("["), let close = s.firstIndex(of: "]") else { continue }
+            let stamp = s[s.index(after: s.startIndex)..<close]
+            let parts = stamp.split(separator: ":")
+            guard parts.count == 2, let m = Double(parts[0]), let sec = Double(parts[1]) else { continue }
+            let text = s[s.index(after: close)...].trimmingCharacters(in: .whitespaces)
+            guard !text.isEmpty else { continue }
+            out.append(LrcLine(time: m * 60 + sec, text: text))
+        }
+        return out.sorted { $0.time < $1.time }
+    }
+
+    nonisolated static func activeLyricIndex(at elapsed: Double, in lines: [LrcLine]) -> Int? {
+        guard !lines.isEmpty, lines[0].time >= 0 else { return nil }
+        return lines.lastIndex { $0.time <= elapsed + 0.25 }
+    }
+
+    // MARK: - Water Hydration Tracker
+
+    private struct WaterDisk: Codable {
+        var dayKey: String
+        var goalML: Int
+        var cupML: Int
+        var todayML: Int
+        var hourly: [Int: Int]
+    }
+
+    func drink(_ ml: Int? = nil) {
+        ensureWaterToday()
+        let amount = max(50, ml ?? waterCupML)
+        waterTodayML += amount
+        let hour = Calendar.current.component(.hour, from: .now)
+        waterHourly[hour, default: 0] += amount
+        saveWater()
+        let pct = min(100, Int(Double(waterTodayML) / Double(max(waterGoalML, 1)) * 100))
+        showToast(symbol: "drop.fill", title: "+\(amount) ml", detail: "\(pct)% of goal", tintHex: "#5AC8FA", duration: 2.5)
+    }
+
+    func resetWater() {
+        waterDayKey = Self.todayKey()
+        waterTodayML = 0
+        waterHourly = [:]
+        saveWater()
+    }
+
+    private func ensureWaterToday() {
+        let today = Self.todayKey()
+        if waterDayKey != today {
+            waterDayKey = today
+            waterTodayML = 0
+            waterHourly = [:]
+        }
+    }
+
+    private func loadWater() {
+        let today = Self.todayKey()
+        if let data = UserDefaults.standard.data(forKey: waterKey),
+           let disk = try? JSONDecoder().decode(WaterDisk.self, from: data) {
+            waterGoalML = max(500, disk.goalML)
+            waterCupML = max(50, disk.cupML)
+            if disk.dayKey == today {
+                waterDayKey = disk.dayKey
+                waterTodayML = disk.todayML
+                waterHourly = disk.hourly
+                return
+            }
+        }
+        waterDayKey = today
+        waterTodayML = 0
+        waterHourly = [:]
+    }
+
+    private func saveWater() {
+        let disk = WaterDisk(dayKey: waterDayKey.isEmpty ? Self.todayKey() : waterDayKey,
+                             goalML: waterGoalML, cupML: waterCupML, todayML: waterTodayML, hourly: waterHourly)
+        if let data = try? JSONEncoder().encode(disk) {
+            UserDefaults.standard.set(data, forKey: waterKey)
+        }
+    }
+
+    private static func todayKey() -> String {
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: .now)
+        return "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0)"
+    }
+
+    // MARK: - Local To-Do List
+
+    var todoDoneCount: Int { todos.filter(\.done).count }
+
+    func addTodo(_ raw: String) {
+        let title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        todos.insert(QuickTodo(title: title, done: false), at: 0)
+    }
+
+    func toggleTodo(_ item: QuickTodo) {
+        guard let i = todos.firstIndex(where: { $0.id == item.id }) else { return }
+        todos[i].done.toggle()
+    }
+
+    func deleteTodo(_ item: QuickTodo) {
+        todos.removeAll { $0.id == item.id }
+    }
+
+    private func loadTodos() {
+        if let data = UserDefaults.standard.data(forKey: todosKey),
+           let decoded = try? JSONDecoder().decode([QuickTodo].self, from: data) {
+            todos = decoded
+        }
+    }
+
+    private func saveTodos() {
+        if let data = try? JSONEncoder().encode(todos) {
+            UserDefaults.standard.set(data, forKey: todosKey)
+        }
     }
 }

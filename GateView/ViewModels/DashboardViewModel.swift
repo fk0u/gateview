@@ -102,6 +102,19 @@ final class DashboardViewModel: ObservableObject {
         store.$theme.map(\.showNotch).removeDuplicates()
             .sink { [weak self] on in on ? self?.productivity.start() : self?.productivity.stop() }
             .store(in: &subscriptions)
+        stats.$stats.map(\.charging).removeDuplicates().dropFirst()
+            .sink { [weak self] charging in
+                guard let self, self.store.theme.showNotch else { return }
+                let pct = self.stats.stats.battery.map { "\($0)%" } ?? ""
+                self.productivity.showToast(
+                    symbol: charging ? "bolt.fill" : "battery.75",
+                    title: charging ? "Charger Connected" : "On Battery",
+                    detail: pct,
+                    tintHex: charging ? "#34C759" : "#FFC56B",
+                    duration: 3.2
+                )
+            }
+            .store(in: &subscriptions)
         nowPlaying.$track.map { $0?.isPlaying ?? false }.removeDuplicates()
             .sink { [weak self] in self?.nowPlayingActive = $0 }
             .store(in: &subscriptions)

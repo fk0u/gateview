@@ -119,6 +119,11 @@ let clip1 = NotchProductivityService.insertClipboard("alpha", into: [])
 let clip2 = NotchProductivityService.insertClipboard("beta", into: clip1)
 let clip3 = NotchProductivityService.insertClipboard("alpha", into: clip2)
 assert(clip3.map(\.text) == ["alpha", "beta"])
+// Synced lyrics LRC parsing & active line lookup
+let lrc = NotchProductivityService.parseLRC("[00:10.50]First line\n[00:25.00]Second line\n[bad]ignored")
+assert(lrc.count == 2 && lrc[0].text == "First line" && lrc[1].time == 25.0)
+assert(NotchProductivityService.activeLyricIndex(at: 12.0, in: lrc) == 0)
+assert(NotchProductivityService.activeLyricIndex(at: 26.0, in: lrc) == 1)
 // uid churn doesn't affect equality (ThemeStore would otherwise rewrite theme.json forever)
 assert(Countdown(title: "a", date: "2027-03-10") == Countdown(title: "a", date: "2027-03-10"))
 

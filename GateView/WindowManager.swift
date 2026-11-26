@@ -38,6 +38,7 @@ final class WindowManager: ObservableObject {
     private let store = ThemeStore.shared
     private var lastDockProbe: TimeInterval = 0
     private var dockHideTask: Task<Void, Never>?
+    private var lastCapsLock = NSEvent.modifierFlags.contains(.capsLock)
 
     func show(viewModel: DashboardViewModel) {
         self.viewModel = viewModel
@@ -129,9 +130,23 @@ final class WindowManager: ObservableObject {
             guard self.expanded != nil, self.region(at: pt) == nil else { return }
             self.expanded = nil // click outside closes the detail card
         }
+        let flags: (NSEvent) -> Void = { [weak self] event in
+            guard let self, self.store.theme.showNotch else { return }
+            let caps = event.modifierFlags.contains(.capsLock)
+            if caps != self.lastCapsLock {
+                self.lastCapsLock = caps
+                self.viewModel?.productivity.showToast(
+                    symbol: caps ? "capslock.fill" : "capslock",
+                    title: caps ? "Caps Lock ON" : "Caps Lock OFF",
+                    tintHex: caps ? "#FFC56B" : "#9BA3B4",
+                    duration: 1.8
+                )
+            }
+        }
         monitors = [
             NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged], handler: move),
             NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: click),
+            NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged, handler: flags),
             NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .mouseExited]) { move($0); return $0 },
         ].compactMap { $0 }
     }
@@ -252,8 +267,8 @@ final class WindowManager: ObservableObject {
         let screens = NSScreen.screens
         guard let screen = screens.indices.contains(store.theme.displayIndex) ? screens[store.theme.displayIndex] : NSScreen.main else { return }
         let isExpanded = expanded == "notch"
-        let width: CGFloat = isExpanded ? 560 : 320
-        let height: CGFloat = isExpanded ? 336 : 38
+        let width: CGFloat = isExpanded ? 596 : 360
+        let height: CGFloat = isExpanded ? 348 : 38
         let frame = NSRect(
             x: round(screen.frame.midX - width / 2),
             y: screen.frame.maxY - height,
