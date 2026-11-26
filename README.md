@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/fk0u/gateview/actions/workflows/ci.yml"><img src="https://github.com/fk0u/gateview/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-2.3.1-FFC56B" alt="Version 2.3.1">
+  <img src="https://img.shields.io/badge/version-2.4.0-FFC56B" alt="Version 2.4.0">
   <img src="https://img.shields.io/badge/macOS-13%2B_Ventura-black?logo=apple&logoColor=white" alt="Ready for macOS 13+">
   <img src="https://img.shields.io/badge/Apple_Silicon_%2B_Intel-universal-0A84FF" alt="Universal binary">
   <img src="https://img.shields.io/badge/RAM-~16_MB-34C759" alt="~16 MB RAM">

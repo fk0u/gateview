@@ -2,6 +2,20 @@
 
 All notable changes to GateView. The app follows semver-ish numbering; every release ships as a universal (Apple Silicon + Intel) build.
 
+## 2.4.0 — 2026-11-26
+
+### Added
+- **Sticky Top-Edge Notch (macOS & Windows/Linux)**: A hardware-style top-edge Notch (not a floating Dynamic Island) anchored flush at `y = 0`. On macOS it floats in its own sticky panel above the menu bar and all windows; click to expand for Now Playing controls, 5-prayer schedule, weather, and CPU/RAM stats. Configurable via `showNotch` in `theme.json` or Settings → Widgets.
+- **macOS Dock Window Preview (DockDoor-style)**: Hover any running app icon on the real macOS Bottom Dock to preview its open windows (with live `ScreenCaptureKit` thumbnails when Screen Recording is granted) and **Focus**, **Minimize**, **Close**, or **Quit** directly from the preview. Configurable via `showDock` in Settings → Widgets with quick Accessibility & Screen Recording permission buttons.
+- **Interactive macOS-style Dock & Window Preview (Windows/Linux Tauri)**: Floating glass Dock with parabolic hover magnification, active app glow, live Win32 window thumbnail previews, and Focus / Minimize / Close / Quit actions directly from the preview.
+- **MIT `LICENSE`** added at the repository root.
+
+### Fixed
+- **Windows click-through overlay**: Fixed inverted hit-region check in `overlay_loop` so widgets, Notch, and Dock receive clicks while the rest of the desktop stays click-through.
+- **Swift 6.2 compatibility**: Fixed type-checker timeout in `WallpaperColorService.swift` so `./Tests/run.sh` and Universal builds compile cleanly on newer Xcode SDKs.
+- **Now Playing artwork**: Fixed stale artwork from the previous track carrying over when switching to a track with no artwork.
+- **Homebrew Cask**: Synced `Casks/gateview.rb` version and SHA256.
+
 ## Unreleased
 
 ### Added
