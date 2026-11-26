@@ -160,6 +160,11 @@ fn close_window(hwnd: isize) {
     gateview_providers::dock::close_window(hwnd);
 }
 
+#[tauri::command]
+fn quit_app(pid: u32) {
+    gateview_providers::dock::quit_app(pid);
+}
+
 struct ConfigPaths {
     notes: PathBuf,
 }
@@ -424,7 +429,8 @@ fn main() {
             get_window_preview,
             focus_window,
             minimize_window,
-            close_window
+            close_window,
+            quit_app
         ])
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;

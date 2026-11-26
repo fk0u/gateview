@@ -108,6 +108,8 @@ let cdTheme = try! Theme.decode(Data(##"{"countdowns":[{"title":"Lebaran","date"
 assert(cdTheme.countdowns.count == 1 && cdTheme.countdowns[0].symbol == "moon.stars")
 // New 2.3 defaults
 assert(cdTheme.autoHideFullscreen && cdTheme.language == "auto" && cdTheme.displayLanguage != "" && cdTheme.adhanVolume == 0.9)
+assert(cdTheme.showNotch && cdTheme.showDock)
+assert(DockWindowService.aspectFit(size: CGSize(width: 1920, height: 1080), maxSize: CGSize(width: 320, height: 200)) == CGSize(width: 320, height: 180))
 // uid churn doesn't affect equality (ThemeStore would otherwise rewrite theme.json forever)
 assert(Countdown(title: "a", date: "2027-03-10") == Countdown(title: "a", date: "2027-03-10"))
 

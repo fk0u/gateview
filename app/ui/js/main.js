@@ -266,7 +266,13 @@ async function showWindowPreview(hwnd) {
   pushHitRegions();
 
   const fresh = await invoke("get_window_preview", { hwnd }).catch(() => null);
-  if (fresh) previewCache.set(hwnd, fresh);
+  if (fresh) {
+    previewCache.set(hwnd, fresh);
+    if (previewCache.size > 24) {
+      const oldest = previewCache.keys().next().value;
+      previewCache.delete(oldest);
+    }
+  }
   if (hoveredHwnd === hwnd) {
     renderPreviewBox(box, win, fresh ?? cached);
     pushHitRegions();
@@ -276,13 +282,14 @@ async function showWindowPreview(hwnd) {
 function renderPreviewBox(box, win, imgUrl) {
   const thumb = imgUrl
     ? `<img src="${imgUrl}" alt="${esc(win.title)}" />`
-    : `<span>${win.is_minimized ? (lang() === "id" ? "Minimized" : "Minimized") : (lang() === "id" ? "Memuat pratinjau…" : "Loading preview…")}</span>`;
+    : `<span>${win.is_minimized ? "Minimized" : (lang() === "id" ? "Memuat pratinjau…" : "Loading preview…")}</span>`;
   box.innerHTML = `
     <div class="preview-head">
       <span class="preview-title">${esc(win.title)}</span>
       <div class="preview-actions">
         <button class="preview-btn" data-act="min" title="Minimize">−</button>
         <button class="preview-btn close" data-act="close" title="Close">×</button>
+        <button class="preview-btn close" data-act="quit" title="Quit app">⏻</button>
       </div>
     </div>
     <div class="preview-thumb" data-act="focus">${thumb}</div>`;
@@ -294,6 +301,11 @@ function renderPreviewBox(box, win, imgUrl) {
   box.querySelector('[data-act="close"]')?.addEventListener("click", (e) => {
     e.stopPropagation();
     invoke("close_window", { hwnd: win.hwnd });
+    hideWindowPreview();
+  });
+  box.querySelector('[data-act="quit"]')?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    invoke("quit_app", { pid: win.pid });
     hideWindowPreview();
   });
 }
@@ -476,7 +488,9 @@ function pushHitRegions() {
   const dpr = window.devicePixelRatio || 1;
   const regions = {};
   document.querySelectorAll("[data-hit]").forEach((el) => {
+    if (el.classList.contains("hidden") || el.closest(".hidden")) return;
     const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return;
     regions[el.dataset.hit] = [
       Math.round(r.left * dpr), Math.round(r.top * dpr),
       Math.round(r.width * dpr), Math.round(r.height * dpr),

@@ -193,9 +193,11 @@ private struct WidgetsSection: View {
     }
 
     var body: some View {
-        SwiftUI.Section("Left side") {
+        SwiftUI.Section("Left side & Overlays") {
             Toggle("Weather", isOn: $store.theme.showWeather)
             Toggle("System stats", isOn: $store.theme.showStats)
+            Toggle("Top-edge Notch", isOn: $store.theme.showNotch)
+            Toggle("Interactive Dock & Window Preview", isOn: $store.theme.showDock)
         }
         SwiftUI.Section {
             List {

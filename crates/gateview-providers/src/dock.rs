@@ -6,6 +6,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct DockWindow {
     pub hwnd: isize,
+    pub pid: u32,
     pub title: String,
     pub process_name: String,
     pub is_active: bool,
@@ -90,6 +91,7 @@ mod imp {
         let process_name = format!("app-{}", pid);
         ctx.out.push(DockWindow {
             hwnd: hwnd.0 as isize,
+            pid,
             title,
             process_name,
             is_active: hwnd == ctx.fg,
@@ -130,6 +132,21 @@ mod imp {
         let hwnd = HWND(hwnd_raw as *mut c_void);
         unsafe {
             let _ = PostMessageW(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0));
+        }
+    }
+
+    pub fn quit_app(target_pid: u32) {
+        unsafe extern "system" fn quit_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+            let wanted = lparam.0 as u32;
+            let mut pid: u32 = 0;
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            if pid == wanted && IsWindowVisible(hwnd).as_bool() {
+                let _ = PostMessageW(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0));
+            }
+            BOOL(1)
+        }
+        unsafe {
+            let _ = EnumWindows(Some(quit_proc), LPARAM(target_pid as isize));
         }
     }
 
@@ -214,12 +231,13 @@ mod imp {
     pub fn focus_window(_hwnd: isize) {}
     pub fn minimize_window(_hwnd: isize) {}
     pub fn close_window(_hwnd: isize) {}
+    pub fn quit_app(_pid: u32) {}
     pub fn capture_preview_data_url(_hwnd: isize) -> Option<String> {
         None
     }
 }
 
-pub use imp::{capture_preview_data_url, close_window, focus_window, list_windows, minimize_window};
+pub use imp::{capture_preview_data_url, close_window, focus_window, list_windows, minimize_window, quit_app};
 
 #[cfg(test)]
 mod tests {

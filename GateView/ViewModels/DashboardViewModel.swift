@@ -24,6 +24,7 @@ final class DashboardViewModel: ObservableObject {
     let remindersService = RemindersService()
     let stats = SystemStatsMonitor()
     let gallery = GalleryService()
+    let dock = DockWindowService()
     private lazy var wallpaper = WallpaperColorService { [weak self] color in
         self?.wallpaperAccent = color.map(Color.init(nsColor:))
     }
@@ -93,6 +94,9 @@ final class DashboardViewModel: ObservableObject {
         }
         store.$theme.map(\.showStats).removeDuplicates()
             .sink { [weak self] on in on ? self?.stats.start() : self?.stats.stop() }
+            .store(in: &subscriptions)
+        store.$theme.map(\.showDock).removeDuplicates()
+            .sink { [weak self] on in on ? self?.dock.start() : self?.dock.stop() }
             .store(in: &subscriptions)
         nowPlaying.$track.map { $0?.isPlaying ?? false }.removeDuplicates()
             .sink { [weak self] in self?.nowPlayingActive = $0 }
