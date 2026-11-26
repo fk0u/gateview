@@ -8,7 +8,7 @@ struct GateViewApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(windows: delegate.windows, viewModel: delegate.viewModel, store: .shared, openSettings: delegate.openSettings)
+            MenuContent(windows: delegate.windows, viewModel: delegate.viewModel, dock: delegate.viewModel.dock, store: .shared, openSettings: delegate.openSettings)
         } label: {
             Image("MenuBarIcon") // template image: follows light/dark menu bar
         }
@@ -69,6 +69,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 private struct MenuContent: View {
     @ObservedObject var windows: WindowManager
     let viewModel: DashboardViewModel
+    @ObservedObject var dock: DockWindowService
     @ObservedObject var store: ThemeStore
     @ObservedObject var updates = UpdateService.shared
     let openSettings: @MainActor () -> Void
@@ -76,6 +77,11 @@ private struct MenuContent: View {
     var body: some View {
         Button("Settings…", action: openSettings)
             .keyboardShortcut(",")
+        Button("Window Switcher…") { windows.toggleSwitcher() }
+            .keyboardShortcut("w", modifiers: [.option, .command])
+        if store.theme.showDock && !dock.hasAccessibility {
+            Button("Enable Dock Preview (Accessibility)…") { dock.requestAccessibility() }
+        }
         Divider()
         if updates.isAvailable {
             Button("Update \(updates.latest ?? "") tersedia…") { NSWorkspace.shared.open(UpdateService.releasesURL) }

@@ -30,6 +30,7 @@ final class WindowManager: ObservableObject {
     private var window: DesktopWindow?
     private var notchWindow: DesktopWindow?
     private var dockPreviewWindow: DesktopWindow?
+    private var switcherWindow: DesktopWindow?
     private weak var viewModel: DashboardViewModel?
     private var observers: [NSObjectProtocol] = []
     private var monitors: [Any] = []
@@ -67,6 +68,7 @@ final class WindowManager: ObservableObject {
 
         setupNotchWindow(viewModel: viewModel)
         setupDockPreviewWindow(viewModel: viewModel)
+        setupSwitcherWindow(viewModel: viewModel)
 
         let center = NotificationCenter.default
         observers = [
@@ -120,6 +122,9 @@ final class WindowManager: ObservableObject {
             }
             if let dp = self.dockPreviewWindow, dp.isVisible, !dp.frame.contains(pt) {
                 self.hideDockPreview()
+            }
+            if let sw = self.switcherWindow, sw.isVisible, !sw.frame.contains(pt) {
+                self.hideSwitcher()
             }
             guard self.expanded != nil, self.region(at: pt) == nil else { return }
             self.expanded = nil // click outside closes the detail card
@@ -262,9 +267,52 @@ final class WindowManager: ObservableObject {
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
         panel.contentView = FirstClickHostingView(
-            rootView: DockView(dock: viewModel.dock, dismiss: { [weak self] in self?.hideDockPreview() })
+            rootView: DockView(dock: viewModel.dock, nowPlaying: viewModel.nowPlaying, dismiss: { [weak self] in self?.hideDockPreview() })
         )
         dockPreviewWindow = panel
+    }
+
+    private func setupSwitcherWindow(viewModel: DashboardViewModel) {
+        let panel = DesktopWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 780, height: 260),
+            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        panel.hidesOnDeactivate = false
+        panel.becomesKeyOnlyIfNeeded = true
+        panel.level = .popUpMenu
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+        panel.isReleasedWhenClosed = false
+        panel.contentView = FirstClickHostingView(
+            rootView: WindowSwitcherView(dock: viewModel.dock, dismiss: { [weak self] in self?.hideSwitcher() })
+        )
+        switcherWindow = panel
+    }
+
+    func toggleSwitcher() {
+        guard let panel = switcherWindow else { return }
+        if panel.isVisible {
+            hideSwitcher()
+            return
+        }
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let width: CGFloat = min(820, screen.frame.width - 80)
+        let height: CGFloat = 258
+        panel.setFrame(NSRect(
+            x: round(screen.frame.midX - width / 2),
+            y: round(screen.frame.midY - height / 2),
+            width: width,
+            height: height
+        ), display: true)
+        panel.orderFrontRegardless()
+    }
+
+    func hideSwitcher() {
+        switcherWindow?.orderOut(nil)
     }
 
     private func probeRealDock() {
@@ -296,8 +344,9 @@ final class WindowManager: ObservableObject {
     private func positionDockPreview(for target: DockHoveredTarget) {
         guard let panel = dockPreviewWindow else { return }
         let count = max(1, min(target.app.windows.count, 3))
-        let width: CGFloat = target.app.windows.isEmpty ? 286 : CGFloat(count) * 234 + 34
-        let height: CGFloat = target.app.windows.isEmpty ? 132 : 216
+        let hasMedia = ["com.spotify.client", "com.apple.Music"].contains(target.app.bundleID) && viewModel?.nowPlaying.track != nil
+        let width: CGFloat = target.app.windows.isEmpty ? 300 : CGFloat(count) * 240 + 36
+        let height: CGFloat = (target.app.windows.isEmpty ? 136 : 224) + (hasMedia ? 58 : 0)
         let screen = NSScreen.screens.first { $0.frame.contains(target.iconFrame.origin) } ?? NSScreen.main
         let sf = screen?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
 

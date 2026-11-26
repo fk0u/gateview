@@ -10,6 +10,7 @@ struct DockAppWindow: Identifiable, Equatable {
     let pid: pid_t
     let title: String
     let bounds: CGRect
+    let isMinimized: Bool
 }
 
 struct DockAppItem: Identifiable, Equatable {
@@ -29,8 +30,15 @@ struct DockHoveredTarget: Equatable {
     let iconFrame: CGRect
 }
 
-/// Enumerates running macOS apps and their windows, detects hovered icons on the real macOS Dock,
-/// captures optional live previews, and supports Focus, Minimize, Close, and Quit directly from the preview.
+struct SwitcherEntry: Identifiable, Equatable {
+    let app: DockAppItem
+    let window: DockAppWindow?
+    var id: String { "\(app.pid)-\(window?.id ?? 0)" }
+}
+
+/// Enumerates running macOS apps and their windows (including minimized), detects hovered icons
+/// on the real macOS Dock via AXList + AXHitTest, captures live ScreenCaptureKit previews,
+/// and supports Focus, Minimize/Unminimize, Maximize/Fill, Close, Hide, and Quit.
 @MainActor
 final class DockWindowService: ObservableObject {
     @Published private(set) var apps: [DockAppItem] = []
@@ -42,8 +50,9 @@ final class DockWindowService: ObservableObject {
     private var observers: [NSObjectProtocol] = []
     private var iconCache: [pid_t: NSImage] = [:]
     private var previewOrder: [CGWindowID] = []
-    private let maxCachedPreviews = 16
+    private let maxCachedPreviews = 24
     private var dockPID: pid_t?
+    private var permissionTask: Task<Void, Never>?
 
     func start() {
         guard observers.isEmpty else { return }
@@ -60,10 +69,22 @@ final class DockWindowService: ObservableObject {
                 Task { @MainActor [weak self] in self?.refresh() }
             }
         }
+        // Lightweight permission check every 3 s while either permission is missing so enabling
+        // it in System Settings takes effect immediately without restarting GateView.
+        permissionTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                self.refreshPermissions()
+                if self.hasAccessibility && self.hasScreenRecording { return }
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            }
+        }
         refresh()
     }
 
     func stop() {
+        permissionTask?.cancel()
+        permissionTask = nil
         let nc = NSWorkspace.shared.notificationCenter
         observers.forEach(nc.removeObserver)
         observers = []
@@ -76,97 +97,27 @@ final class DockWindowService: ObservableObject {
     }
 
     func refreshPermissions() {
-        hasAccessibility = AXIsProcessTrusted()
-        hasScreenRecording = CGPreflightScreenCaptureAccess()
+        let ax = AXIsProcessTrusted()
+        let sc = CGPreflightScreenCaptureAccess()
+        if ax != hasAccessibility { hasAccessibility = ax }
+        if sc != hasScreenRecording { hasScreenRecording = sc }
     }
 
     func requestAccessibility() {
         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(opts)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
         refreshPermissions()
     }
 
     func requestScreenRecording() {
         _ = CGRequestScreenCaptureAccess()
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
         refreshPermissions()
-    }
-
-    /// Queries the real macOS Dock via Accessibility at `screenPoint` (AppKit bottom-left coordinates)
-    /// to find the hovered Dock icon and its matching running app.
-    func dockItem(at screenPoint: NSPoint) -> DockHoveredTarget? {
-        guard AXIsProcessTrusted() else { return nil }
-        guard let primaryHeight = NSScreen.screens.first?.frame.height else { return nil }
-        // Quick reject: only query AX when cursor is near a screen edge where the Dock can live.
-        let nearEdge = NSScreen.screens.contains { s in
-            let f = s.frame
-            let margin: CGFloat = 110
-            return f.contains(screenPoint) && (
-                screenPoint.y <= f.minY + margin ||
-                screenPoint.x <= f.minX + margin ||
-                screenPoint.x >= f.maxX - margin
-            )
-        }
-        guard nearEdge else { return nil }
-
-        if dockPID == nil || NSRunningApplication(processIdentifier: dockPID!) == nil {
-            dockPID = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first?.processIdentifier
-        }
-        guard let pid = dockPID else { return nil }
-
-        let cgPoint = CGPoint(x: screenPoint.x, y: primaryHeight - screenPoint.y)
-        let dockEl = AXUIElementCreateApplication(pid)
-        var hitRef: AXUIElement?
-        guard AXUIElementCopyElementAtPosition(dockEl, Float(cgPoint.x), Float(cgPoint.y), &hitRef) == .success,
-              let el = hitRef
-        else { return nil }
-
-        var subroleRef: CFTypeRef?
-        _ = AXUIElementCopyAttributeValue(el, kAXSubroleAttribute as CFString, &subroleRef)
-        let subrole = subroleRef as? String ?? ""
-        guard subrole == "AXApplicationDockItem" else { return nil }
-
-        var titleRef: CFTypeRef?
-        _ = AXUIElementCopyAttributeValue(el, kAXTitleAttribute as CFString, &titleRef)
-        let title = (titleRef as? String) ?? ""
-
-        var urlRef: CFTypeRef?
-        _ = AXUIElementCopyAttributeValue(el, kAXURLAttribute as CFString, &urlRef)
-        let itemURL = urlRef as? URL
-
-        var posRef: CFTypeRef?
-        var sizeRef: CFTypeRef?
-        var pos = CGPoint.zero
-        var size = CGSize(width: 56, height: 56)
-        if AXUIElementCopyAttributeValue(el, kAXPositionAttribute as CFString, &posRef) == .success,
-           let pVal = posRef {
-            AXValueGetValue(pVal as! AXValue, .cgPoint, &pos)
-        }
-        if AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &sizeRef) == .success,
-           let sVal = sizeRef {
-            AXValueGetValue(sVal as! AXValue, .cgSize, &size)
-        }
-        let appKitFrame = CGRect(x: pos.x, y: primaryHeight - pos.y - size.height, width: size.width, height: size.height)
-
-        // Match against running regular apps by bundle URL first, then localized name.
-        let running = NSWorkspace.shared.runningApplications.first { app in
-            guard app.activationPolicy == .regular, !app.isTerminated else { return false }
-            if let itemURL, let appURL = app.bundleURL, appURL.standardizedFileURL == itemURL.standardizedFileURL {
-                return true
-            }
-            return !title.isEmpty && app.localizedName == title
-        }
-        guard let running else { return nil }
-
-        let windowsByPID = Self.snapshotWindows()
-        let appItem = DockAppItem(
-            pid: running.processIdentifier,
-            name: running.localizedName ?? title,
-            bundleID: running.bundleIdentifier ?? "",
-            isActive: running.isActive,
-            isHidden: running.isHidden,
-            windows: windowsByPID[running.processIdentifier] ?? []
-        )
-        return DockHoveredTarget(app: appItem, iconFrame: appKitFrame)
     }
 
     func icon(for pid: pid_t) -> NSImage {
@@ -187,20 +138,164 @@ final class DockWindowService: ObservableObject {
 
         apps = running.map { app in
             let pid = app.processIdentifier
-            let wins = windowsByPID[pid] ?? []
             return DockAppItem(
                 pid: pid,
                 name: app.localizedName ?? "App",
                 bundleID: app.bundleIdentifier ?? "",
                 isActive: app.isActive,
                 isHidden: app.isHidden,
-                windows: wins
+                windows: windowsByPID[pid] ?? []
             )
         }
     }
 
+    /// Flat list of open windows across all running apps for the Option+Tab Window Switcher.
+    func switcherEntries() -> [SwitcherEntry] {
+        refresh()
+        var out: [SwitcherEntry] = []
+        let sorted = apps.sorted { a, b in
+            if a.isActive != b.isActive { return a.isActive }
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
+        for app in sorted {
+            if app.windows.isEmpty {
+                out.append(SwitcherEntry(app: app, window: nil))
+            } else {
+                for w in app.windows.prefix(4) {
+                    out.append(SwitcherEntry(app: app, window: w))
+                }
+            }
+        }
+        return out
+    }
+
+    /// Reads the real macOS Dock's AXList children directly (far more reliable than AXHitTest alone
+    /// with Dock magnification and multi-monitor setups) to find the hovered running app icon.
+    func dockItem(at screenPoint: NSPoint) -> DockHoveredTarget? {
+        guard AXIsProcessTrusted() else { return nil }
+        guard let primaryHeight = NSScreen.screens.first?.frame.height else { return nil }
+        let nearEdge = NSScreen.screens.contains { s in
+            let f = s.frame
+            let margin: CGFloat = 128
+            return f.contains(screenPoint) && (
+                screenPoint.y <= f.minY + margin ||
+                screenPoint.x <= f.minX + margin ||
+                screenPoint.x >= f.maxX - margin
+            )
+        }
+        guard nearEdge else { return nil }
+
+        if dockPID == nil || NSRunningApplication(processIdentifier: dockPID!) == nil {
+            dockPID = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first?.processIdentifier
+        }
+        guard let pid = dockPID else { return nil }
+
+        let dockEl = AXUIElementCreateApplication(pid)
+        let cgPoint = CGPoint(x: screenPoint.x, y: primaryHeight - screenPoint.y)
+
+        // Strategy 1: Enumerate Dock AXList children directly and test their icon rects.
+        if let matched = findDockItemInList(dockEl: dockEl, cgPoint: cgPoint, primaryHeight: primaryHeight) {
+            return matched
+        }
+
+        // Strategy 2: Fallback to AXUIElementCopyElementAtPosition.
+        var hitRef: AXUIElement?
+        if AXUIElementCopyElementAtPosition(dockEl, Float(cgPoint.x), Float(cgPoint.y), &hitRef) == .success,
+           let el = hitRef {
+            return resolveDockElement(el, primaryHeight: primaryHeight)
+        }
+        return nil
+    }
+
+    private func findDockItemInList(dockEl: AXUIElement, cgPoint: CGPoint, primaryHeight: CGFloat) -> DockHoveredTarget? {
+        var topChildrenRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(dockEl, kAXChildrenAttribute as CFString, &topChildrenRef) == .success,
+              let topChildren = topChildrenRef as? [AXUIElement]
+        else { return nil }
+
+        for child in topChildren {
+            var roleRef: CFTypeRef?
+            _ = AXUIElementCopyAttributeValue(child, kAXRoleAttribute as CFString, &roleRef)
+            guard (roleRef as? String) == (kAXListRole as String) else { continue }
+
+            var itemsRef: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(child, kAXChildrenAttribute as CFString, &itemsRef) == .success,
+                  let items = itemsRef as? [AXUIElement]
+            else { continue }
+
+            for item in items {
+                guard let rect = axCGFrame(of: item) else { continue }
+                // Slight vertical pad makes hovering magnified Dock icons rock-solid.
+                if rect.insetBy(dx: -3, dy: -12).contains(cgPoint) {
+                    if let target = resolveDockElement(item, primaryHeight: primaryHeight, knownCGRect: rect) {
+                        return target
+                    }
+                }
+            }
+        }
+        return nil
+    }
+
+    private func resolveDockElement(_ el: AXUIElement, primaryHeight: CGFloat, knownCGRect: CGRect? = nil) -> DockHoveredTarget? {
+        var subroleRef: CFTypeRef?
+        _ = AXUIElementCopyAttributeValue(el, kAXSubroleAttribute as CFString, &subroleRef)
+        let subrole = subroleRef as? String ?? ""
+        guard subrole == "AXApplicationDockItem" || subrole == "AXMinimizedWindowDockItem" else { return nil }
+
+        var titleRef: CFTypeRef?
+        _ = AXUIElementCopyAttributeValue(el, kAXTitleAttribute as CFString, &titleRef)
+        let title = (titleRef as? String) ?? ""
+
+        var urlRef: CFTypeRef?
+        _ = AXUIElementCopyAttributeValue(el, kAXURLAttribute as CFString, &urlRef)
+        let itemURL = urlRef as? URL
+
+        let cgRect = knownCGRect ?? axCGFrame(of: el) ?? CGRect(x: 0, y: primaryHeight - 64, width: 56, height: 56)
+        let appKitFrame = CGRect(x: cgRect.origin.x, y: primaryHeight - cgRect.origin.y - cgRect.height, width: cgRect.width, height: cgRect.height)
+
+        let running = NSWorkspace.shared.runningApplications.first { app in
+            guard app.activationPolicy == .regular, !app.isTerminated else { return false }
+            if let itemURL, let appURL = app.bundleURL, appURL.standardizedFileURL == itemURL.standardizedFileURL {
+                return true
+            }
+            if !title.isEmpty && app.localizedName?.caseInsensitiveCompare(title) == .orderedSame {
+                return true
+            }
+            return title == "Finder" && app.bundleIdentifier == "com.apple.finder"
+        }
+        guard let running else { return nil }
+
+        let windowsByPID = Self.snapshotWindows()
+        let appItem = DockAppItem(
+            pid: running.processIdentifier,
+            name: running.localizedName ?? title,
+            bundleID: running.bundleIdentifier ?? "",
+            isActive: running.isActive,
+            isHidden: running.isHidden,
+            windows: windowsByPID[running.processIdentifier] ?? []
+        )
+        return DockHoveredTarget(app: appItem, iconFrame: appKitFrame)
+    }
+
+    private func axCGFrame(of el: AXUIElement) -> CGRect? {
+        var posRef: CFTypeRef?
+        var sizeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(el, kAXPositionAttribute as CFString, &posRef) == .success,
+              AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &sizeRef) == .success,
+              let pVal = posRef, let sVal = sizeRef
+        else { return nil }
+        var pos = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(pVal as! AXValue, .cgPoint, &pos),
+              AXValueGetValue(sVal as! AXValue, .cgSize, &size),
+              size.width > 0, size.height > 0
+        else { return nil }
+        return CGRect(origin: pos, size: size)
+    }
+
+    /// Captures all layer-0 application windows (including minimized/off-space windows).
     nonisolated static func snapshotWindows() -> [pid_t: [DockAppWindow]] {
-        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+        guard let list = CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return [:]
         }
         var grouped: [pid_t: [DockAppWindow]] = [:]
@@ -210,12 +305,15 @@ final class DockWindowService: ObservableObject {
                   let num = (info[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
                   let boundsDict = info[kCGWindowBounds as String] as? [String: Any],
                   let bounds = CGRect(dictionaryRepresentation: boundsDict as CFDictionary),
-                  bounds.width >= 60, bounds.height >= 40
+                  bounds.width >= 80, bounds.height >= 50
             else { continue }
+            let onScreen = (info[kCGWindowIsOnscreen as String] as? NSNumber)?.boolValue ?? false
             let rawTitle = (info[kCGWindowName as String] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            // Off-screen windows without a title are usually hidden helper surfaces; skip them.
+            if !onScreen && rawTitle.isEmpty { continue }
             let owner = (info[kCGWindowOwnerName as String] as? String) ?? "Window"
             let title = rawTitle.isEmpty ? owner : rawTitle
-            grouped[pid, default: []].append(DockAppWindow(id: num, pid: pid, title: title, bounds: bounds))
+            grouped[pid, default: []].append(DockAppWindow(id: num, pid: pid, title: title, bounds: bounds, isMinimized: !onScreen))
         }
         return grouped
     }
@@ -223,13 +321,12 @@ final class DockWindowService: ObservableObject {
     // MARK: Live Window Preview
 
     /// Captures a downscaled live preview for `window` on macOS 14+ when Screen Recording is already granted.
-    /// Never triggers an unexpected permission popup; UI falls back gracefully to app icon + title.
     func loadPreview(for window: DockAppWindow) {
         guard CGPreflightScreenCaptureAccess() else { return }
         #if canImport(ScreenCaptureKit)
         if #available(macOS 14.0, *) {
             let wid = window.id
-            let target = Self.aspectFit(size: window.bounds.size, maxSize: CGSize(width: 320, height: 200))
+            let target = Self.aspectFit(size: window.bounds.size, maxSize: CGSize(width: 360, height: 220))
             Task { [weak self] in
                 guard let image = await Self.captureSCWindow(id: wid, size: target) else { return }
                 await MainActor.run {
@@ -268,7 +365,7 @@ final class DockWindowService: ObservableObject {
     }
     #endif
 
-    // MARK: Window Actions (Focus, Minimize, Close, Quit)
+    // MARK: Window Actions (Focus, Minimize, Maximize/Fill, Close, Hide, Quit)
 
     func focus(app: DockAppItem, window: DockAppWindow? = nil) {
         guard let running = NSRunningApplication(processIdentifier: app.pid) else { return }
@@ -283,14 +380,41 @@ final class DockWindowService: ObservableObject {
 
     func minimize(app: DockAppItem, window: DockAppWindow? = nil) {
         if let window, let axWin = axWindow(for: window) {
-            let err = AXUIElementSetAttributeValue(axWin, kAXMinimizedAttribute as CFString, kCFBooleanTrue)
-            if err == .success {
+            let nextState: CFBoolean = window.isMinimized ? kCFBooleanFalse : kCFBooleanTrue
+            if AXUIElementSetAttributeValue(axWin, kAXMinimizedAttribute as CFString, nextState) == .success {
+                if window.isMinimized {
+                    NSRunningApplication(processIdentifier: app.pid)?.activate(options: [])
+                    AXUIElementPerformAction(axWin, kAXRaiseAction as CFString)
+                }
                 refresh()
                 return
             }
         }
-        // Fallback when Accessibility permission isn't granted: hide the app cleanly.
         NSRunningApplication(processIdentifier: app.pid)?.hide()
+        refresh()
+    }
+
+    /// Expands the window to fill the visible screen area (green traffic-light action).
+    func maximize(app: DockAppItem, window: DockAppWindow) {
+        guard let axWin = axWindow(for: window),
+              let primaryHeight = NSScreen.screens.first?.frame.height,
+              let screen = NSScreen.main ?? NSScreen.screens.first
+        else {
+            focus(app: app, window: window)
+            return
+        }
+        let vf = screen.visibleFrame
+        var pos = CGPoint(x: vf.minX, y: primaryHeight - vf.maxY)
+        var size = CGSize(width: vf.width, height: vf.height)
+        AXUIElementSetAttributeValue(axWin, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+        if let pVal = AXValueCreate(.cgPoint, &pos) {
+            AXUIElementSetAttributeValue(axWin, kAXPositionAttribute as CFString, pVal)
+        }
+        if let sVal = AXValueCreate(.cgSize, &size) {
+            AXUIElementSetAttributeValue(axWin, kAXSizeAttribute as CFString, sVal)
+        }
+        NSRunningApplication(processIdentifier: app.pid)?.activate(options: [])
+        AXUIElementPerformAction(axWin, kAXRaiseAction as CFString)
         refresh()
     }
 
@@ -305,6 +429,12 @@ final class DockWindowService: ObservableObject {
                 self?.refresh()
             }
         }
+    }
+
+    func toggleHide(app: DockAppItem) {
+        guard let running = NSRunningApplication(processIdentifier: app.pid) else { return }
+        if running.isHidden { running.unhide() } else { running.hide() }
+        refresh()
     }
 
     func quit(app: DockAppItem) {

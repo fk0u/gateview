@@ -200,16 +200,24 @@ private struct WidgetsSection: View {
             Toggle("Top-edge Notch (sticky front)", isOn: $store.theme.showNotch)
             Toggle("macOS Dock Window Preview", isOn: $store.theme.showDock)
             if store.theme.showDock {
+                let axOk = AXIsProcessTrusted()
+                let scOk = CGPreflightScreenCaptureAccess()
                 HStack(spacing: 10) {
-                    Button("Accessibility Permission…") {
+                    Button(axOk ? "Accessibility: Granted ✓" : "Grant Accessibility (Required)…") {
                         let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
                         _ = AXIsProcessTrustedWithOptions(opts)
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                            NSWorkspace.shared.open(url)
+                        }
                     }
-                    Button("Screen Recording (Live Thumbnails)…") {
+                    Button(scOk ? "Screen Recording: Granted ✓" : "Grant Screen Recording (Thumbnails)…") {
                         _ = CGRequestScreenCaptureAccess()
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                            NSWorkspace.shared.open(url)
+                        }
                     }
                 }
-                Text("Hover icons on the macOS Dock to preview, close, minimize, or quit windows. Accessibility is needed to read hovered Dock icons; Screen Recording enables live window thumbnails.")
+                Text("Hover icons on the macOS Dock to preview, close, minimize, maximize, or quit windows. Accessibility is required by macOS to inspect hovered Dock icons; Screen Recording enables live window thumbnails.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
